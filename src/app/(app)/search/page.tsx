@@ -74,7 +74,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
         </Group>
       )}
       {items.length > 0 && (
-        <Group title="Склад">
+        <Group title="Инвентарь">
           {items.map((i) => (
             <Item key={i.id} href={`/inventory/${i.id}`} title={i.name} hint={`Остаток: ${fmtQty(i.quantity)} ${i.unit}`} />
           ))}

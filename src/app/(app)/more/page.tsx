@@ -7,7 +7,7 @@ import { ConfirmButton } from "@/components/auto-submit";
 import { Field, PageHeader } from "@/components/ui";
 import { IconChart, IconChevron, IconLogout, IconSearch, IconTag, IconUsers } from "@/components/icons";
 
-const ROLE: Record<string, string> = { OWNER: "Владелец", DOCTOR: "Врач", ASSISTANT: "Ассистент" };
+const ROLE: Record<string, string> = { OWNER: "Администратор", DOCTOR: "Врач", ASSISTANT: "Ассистент" };
 const PW: Record<string, [string, string]> = {
   ok: ["Пароль изменён", "bg-emerald-50 text-emerald-700"],
   wrong: ["Текущий пароль неверный", "bg-rose-50 text-rose-700"],
@@ -30,7 +30,7 @@ export default async function MorePage({ searchParams }: { searchParams: Promise
 
   const links = [
     { href: "/search", label: "Поиск", Icon: IconSearch },
-    { href: "/prices", label: "Прайс клиники", Icon: IconTag },
+    { href: "/prices", label: "Прайсы", Icon: IconTag },
     { href: "/stats", label: "Статистика", Icon: IconChart },
     { href: "/patients?filter=archived", label: "Архив пациентов", Icon: IconUsers },
   ];
@@ -42,7 +42,7 @@ export default async function MorePage({ searchParams }: { searchParams: Promise
       {sp.welcome && (
         <div className="card card-pad bg-accent-soft/60">
           <div className="font-medium text-accent-ink">Добро пожаловать в Dental Base!</div>
-          <p className="mt-1 text-sm text-accent-ink/80">Ниже добавьте аккаунт врача. Чтобы посмотреть, как всё работает, можно загрузить DEMO-пациентов, а потом удалить их одной кнопкой.</p>
+          <p className="mt-1 text-sm text-accent-ink/80">Ниже добавьте аккаунт врача (роль «Врач» — он будет подставляться в записи и приёмы). Чтобы посмотреть, как всё работает, можно загрузить DEMO-пациентов, а потом удалить их одной кнопкой.</p>
         </div>
       )}
 
@@ -84,8 +84,8 @@ export default async function MorePage({ searchParams }: { searchParams: Promise
               <Field label="Роль">
                 <select name="role" defaultValue="DOCTOR" className="input">
                   <option value="DOCTOR">Врач</option>
+                  <option value="OWNER">Администратор</option>
                   <option value="ASSISTANT">Ассистент</option>
-                  <option value="OWNER">Владелец</option>
                 </select>
               </Field>
               <button className="btn-primary sm:col-span-2">Добавить</button>

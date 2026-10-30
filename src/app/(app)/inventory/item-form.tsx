@@ -1,5 +1,5 @@
 import type { InventoryItem, Supplier } from "@prisma/client";
-import { INVENTORY_CATEGORY } from "@/lib/labels";
+import { INVENTORY_CATEGORY, STOCK_LEVEL } from "@/lib/labels";
 import { toISODate } from "@/lib/dates";
 import { Field, Select } from "@/components/ui";
 
@@ -23,8 +23,17 @@ export function ItemForm({
           <input name="unit" defaultValue={item?.unit ?? "шт."} list="units" className="input" />
           <datalist id="units">{["шт.", "уп.", "шприц", "карпула", "мл", "г", "набор"].map((u) => <option key={u} value={u} />)}</datalist>
         </Field>
+        <label className="flex items-center gap-3 rounded-xl bg-zinc-50 px-3.5 py-3 text-sm sm:col-span-2">
+          <input type="checkbox" name="countable" defaultChecked={item?.countable ?? true} className="h-5 w-5 accent-teal-700" />
+          Считаем штуками (если выключить — отмечаем «много / есть / мало / нет»)
+        </label>
         <Field label="Количество"><input name="quantity" inputMode="decimal" defaultValue={item?.quantity ?? 0} className="input" /></Field>
         <Field label="Минимальный остаток"><input name="minQuantity" inputMode="decimal" defaultValue={item?.minQuantity ?? 1} className="input" /></Field>
+        <Field label="Уровень (если не считаем штуками)">
+          <select name="level" defaultValue={item?.level ?? "ENOUGH"} className="input">
+            {STOCK_LEVEL.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
+          </select>
+        </Field>
       </div>
       <div className="card card-pad grid gap-4 sm:grid-cols-2">
         <Field label="Последняя цена покупки, ₽"><input name="lastPurchasePrice" inputMode="numeric" defaultValue={item?.lastPurchasePrice ?? ""} className="input" /></Field>

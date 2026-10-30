@@ -3,61 +3,50 @@
 import { useState } from "react";
 import type { ToothStatus, TreatmentStatus } from "@prisma/client";
 import { saveTooth } from "@/actions/teeth";
+import { addTreatmentItem, deleteTreatmentItem, updateTreatmentItem } from "@/actions/treatment";
 import { TOOTH_STATUS, TREATMENT_STATUS } from "@/lib/labels";
 import { LOWER, UPPER } from "@/lib/teeth";
+import { ToothShape, toothStatusOpt } from "./tooth-shape";
 
 export type ToothData = {
   number: number;
   status: ToothStatus;
   diagnosis: string | null;
   problem: string | null;
-  treatment: string | null;
   notes: string | null;
-  price: number | null;
-  treatmentStatus: TreatmentStatus | null;
+};
+
+export type PlanItemData = {
+  id: string;
+  toothNumber: number | null;
+  treatment: string;
+  price: number;
+  status: TreatmentStatus;
 };
 
 export type PriceOption = { name: string; price: number; group: string };
 
-const statusOf = (s: ToothStatus) => TOOTH_STATUS.find((o) => o.value === s) ?? TOOTH_STATUS[0];
-
-function ToothShape({ status, upper }: { status: ToothStatus; upper: boolean }) {
-  const o = statusOf(status);
-  const extracted = status === "EXTRACTED";
-  return (
-    <svg viewBox="0 0 24 28" className={`h-7 w-6 ${upper ? "" : "rotate-180"}`} aria-hidden>
-      <path
-        d="M6.5 2C4 2 2.5 4 2.5 7c0 3.5 1.6 5.2 2.1 8.6.5 3.3 1.1 9.4 3 9.4 1.6 0 1.7-4.6 2.8-7 .5-1 1-1.6 1.6-1.6s1.1.6 1.6 1.6c1.1 2.4 1.2 7 2.8 7 1.9 0 2.5-6.1 3-9.4.5-3.4 2.1-5.1 2.1-8.6C21.5 4 20 2 17.5 2c-2.2 0-3.2 1.2-5.5 1.2S8.7 2 6.5 2z"
-        fill={o.fill}
-        stroke={o.stroke}
-        strokeWidth={1.4}
-        strokeDasharray={extracted ? "2 2" : undefined}
-      />
-      {status === "IMPLANT" && <path d="M12 12v12M9 15h6M9.5 18h5M10 21h4" stroke={o.stroke} strokeWidth={1.2} />}
-      {status === "CROWN" && <path d="M4 7.5h16" stroke={o.stroke} strokeWidth={1.4} />}
-    </svg>
-  );
-}
-
 export function Odontogram({
   patientId,
   teeth,
+  plan,
   prices,
 }: {
   patientId: string;
   teeth: ToothData[];
+  plan: PlanItemData[];
   prices: PriceOption[];
 }) {
   const [open, setOpen] = useState<number | null>(null);
   const map = new Map(teeth.map((t) => [t.number, t]));
-  const get = (n: number): ToothData =>
-    map.get(n) ?? { number: n, status: "HEALTHY", diagnosis: null, problem: null, treatment: null, notes: null, price: null, treatmentStatus: null };
+  const get = (n: number): ToothData => map.get(n) ?? { number: n, status: "HEALTHY", diagnosis: null, problem: null, notes: null };
+  const planFor = (n: number) => plan.filter((p) => p.toothNumber === n && p.status !== "CANCELLED");
 
   const Jaw = ({ list, upper }: { list: number[]; upper: boolean }) => (
     <div className="grid grid-cols-8 gap-y-2 sm:grid-cols-[repeat(16,minmax(0,1fr))]">
       {list.map((n, i) => {
         const t = get(n);
-        const hasInfo = !!(t.diagnosis || t.treatment || t.notes);
+        const hasPlan = planFor(n).some((p) => p.status !== "DONE");
         return (
           <button
             key={n}
@@ -66,12 +55,12 @@ export function Odontogram({
             className={`relative flex flex-col items-center gap-0.5 rounded-xl py-1.5 transition hover:bg-zinc-50 active:scale-95 ${
               open === n ? "bg-accent-soft" : ""
             } ${i === 7 ? "sm:mr-1.5 sm:border-r sm:border-dashed sm:border-zinc-200" : ""}`}
-            aria-label={`Зуб ${n}: ${statusOf(t.status).label}`}
+            aria-label={`Зуб ${n}: ${toothStatusOpt(t.status).label}`}
           >
             {upper && <span className="text-[11px] font-medium tabular-nums text-ink-soft">{n}</span>}
             <ToothShape status={t.status} upper={upper} />
             {!upper && <span className="text-[11px] font-medium tabular-nums text-ink-soft">{n}</span>}
-            {hasInfo && <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-accent" />}
+            {hasPlan && <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-orange-500" />}
           </button>
         );
       })}
@@ -97,6 +86,9 @@ export function Odontogram({
             {o.label}
           </span>
         ))}
+        <span className="flex items-center gap-1.5 text-xs text-ink-soft">
+          <span className="h-2 w-2 rounded-full bg-orange-500" /> есть в плане
+        </span>
       </div>
 
       {current && (
@@ -104,6 +96,7 @@ export function Odontogram({
           key={current.number}
           patientId={patientId}
           tooth={current}
+          plan={planFor(current.number)}
           prices={prices}
           onClose={() => setOpen(null)}
         />
@@ -115,19 +108,22 @@ export function Odontogram({
 function ToothSheet({
   patientId,
   tooth,
+  plan,
   prices,
   onClose,
 }: {
   patientId: string;
   tooth: ToothData;
+  plan: PlanItemData[];
   prices: PriceOption[];
   onClose: () => void;
 }) {
   const [status, setStatus] = useState<ToothStatus>(tooth.status);
-  const [treatment, setTreatment] = useState(tooth.treatment ?? "");
-  const [price, setPrice] = useState(tooth.price?.toString() ?? "");
-  const [saving, setSaving] = useState(false);
+  const [treatment, setTreatment] = useState("");
+  const [price, setPrice] = useState("");
+  const [busy, setBusy] = useState(false);
   const save = saveTooth.bind(null, patientId, tooth.number);
+  const addItem = addTreatmentItem.bind(null, patientId);
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 sm:items-center" onClick={onClose}>
@@ -140,21 +136,22 @@ function ToothSheet({
           <h3 className="text-xl font-semibold">Зуб {tooth.number}</h3>
           <button type="button" onClick={onClose} className="btn-ghost btn-sm">Закрыть</button>
         </div>
+
+        {/* Состояние зуба */}
         <form
           action={async (fd) => {
-            setSaving(true);
+            setBusy(true);
             try {
               await save(fd);
-              onClose();
             } finally {
-              setSaving(false);
+              setBusy(false);
             }
           }}
           className="space-y-4"
         >
           <input type="hidden" name="status" value={status} />
           <div>
-            <span className="label">Статус</span>
+            <span className="label">Состояние</span>
             <div className="flex flex-wrap gap-1.5">
               {TOOTH_STATUS.map((o) => (
                 <button
@@ -177,66 +174,83 @@ function ToothSheet({
               <input name="diagnosis" defaultValue={tooth.diagnosis ?? ""} placeholder="Средний кариес" className="input" />
             </label>
             <label className="block">
-              <span className="label">Проблема / жалоба</span>
+              <span className="label">Жалоба / проблема</span>
               <input name="problem" defaultValue={tooth.problem ?? ""} className="input" />
-            </label>
-          </div>
-          <label className="block">
-            <span className="label">Лечение / план</span>
-            <input name="treatment" value={treatment} onChange={(e) => setTreatment(e.target.value)} placeholder="Композитная реставрация" className="input" />
-          </label>
-          {prices.length > 0 && (
-            <div>
-              <span className="label">Выбрать из прайса</span>
-              <select
-                className="input"
-                value=""
-                onChange={(e) => {
-                  const p = prices[Number(e.target.value)];
-                  if (p) {
-                    setPrice(String(p.price));
-                    if (!treatment) setTreatment(p.name);
-                  }
-                }}
-              >
-                <option value="">— выбрать —</option>
-                {["Прайс пациента", "Прайс клиники"].map((g) => {
-                  const items = prices.map((p, i) => ({ p, i })).filter(({ p }) => p.group === g);
-                  if (!items.length) return null;
-                  return (
-                    <optgroup key={g} label={g}>
-                      {items.map(({ p, i }) => (
-                        <option key={i} value={i}>{p.name} — {p.price.toLocaleString("ru-RU")} ₽</option>
-                      ))}
-                    </optgroup>
-                  );
-                })}
-              </select>
-            </div>
-          )}
-          <div className="grid grid-cols-2 gap-3">
-            <label className="block">
-              <span className="label">Цена, ₽</span>
-              <input name="price" inputMode="numeric" value={price} onChange={(e) => setPrice(e.target.value)} className="input" />
-            </label>
-            <label className="block">
-              <span className="label">Статус лечения</span>
-              <select name="treatmentStatus" defaultValue={tooth.treatmentStatus ?? ""} className="input">
-                <option value="">—</option>
-                {TREATMENT_STATUS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
             </label>
           </div>
           <label className="block">
             <span className="label">Заметки</span>
             <textarea name="notes" rows={2} defaultValue={tooth.notes ?? ""} className="input" />
           </label>
-          <label className="flex items-center gap-3 rounded-xl bg-zinc-50 px-3.5 py-3 text-sm">
-            <input type="checkbox" name="addToPlan" className="h-5 w-5 rounded accent-teal-700" />
-            Добавить лечение в план лечения
-          </label>
-          <button disabled={saving} className="btn-primary w-full">{saving ? "Сохраняю…" : "Сохранить"}</button>
+          <button disabled={busy} className="btn-secondary w-full">{busy ? "Сохраняю…" : "Сохранить состояние"}</button>
         </form>
+
+        {/* Лечение по плану — одно место для лечения и цены */}
+        <div className="mt-6 border-t border-zinc-100 pt-5">
+          <div className="section-title">Лечение по плану</div>
+          {plan.length === 0 && <p className="mb-3 text-sm text-ink-mute">Для этого зуба лечение ещё не запланировано</p>}
+          <div className="mb-3 space-y-2">
+            {plan.map((p) => (
+              <div key={p.id} className="flex items-center gap-2 rounded-xl bg-zinc-50 px-3 py-2">
+                <span className="min-w-0 flex-1 text-[15px]">
+                  {p.treatment}
+                  <span className="block text-xs text-ink-mute">{p.price ? `${p.price.toLocaleString("ru-RU")} ₽` : "цена не указана"}</span>
+                </span>
+                <form action={updateTreatmentItem.bind(null, p.id)}>
+                  <select
+                    name="status"
+                    defaultValue={p.status}
+                    onChange={(e) => e.currentTarget.form?.requestSubmit()}
+                    className="rounded-lg border-0 bg-white py-1.5 pl-2 pr-7 text-sm ring-1 ring-zinc-200"
+                  >
+                    {TREATMENT_STATUS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </form>
+                <form action={deleteTreatmentItem.bind(null, p.id)}>
+                  <button className="px-1 text-ink-mute hover:text-rose-600" aria-label="Удалить">✕</button>
+                </form>
+              </div>
+            ))}
+          </div>
+          <form
+            action={async (fd) => {
+              setBusy(true);
+              try {
+                await addItem(fd);
+                setTreatment("");
+                setPrice("");
+              } finally {
+                setBusy(false);
+              }
+            }}
+            className="space-y-3"
+          >
+            <input type="hidden" name="toothNumber" value={tooth.number} />
+            {prices.length > 0 && (
+              <select
+                className="input"
+                value=""
+                onChange={(e) => {
+                  const p = prices[Number(e.target.value)];
+                  if (p) {
+                    setTreatment(p.name);
+                    setPrice(String(p.price));
+                  }
+                }}
+              >
+                <option value="">Выбрать услугу из прайса…</option>
+                {prices.map((p, i) => (
+                  <option key={i} value={i}>{p.name} — {p.price.toLocaleString("ru-RU")} ₽</option>
+                ))}
+              </select>
+            )}
+            <div className="grid grid-cols-[1fr_120px] gap-2">
+              <input name="treatment" required value={treatment} onChange={(e) => setTreatment(e.target.value)} placeholder="Лечение" className="input" />
+              <input name="price" inputMode="numeric" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Цена" className="input" />
+            </div>
+            <button disabled={busy} className="btn-primary w-full">+ Добавить в план</button>
+          </form>
+        </div>
       </div>
     </div>
   );

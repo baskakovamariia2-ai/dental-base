@@ -4,8 +4,8 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { fmtDate, fmtQty, money } from "@/lib/format";
 import { toISODate } from "@/lib/dates";
-import { INVENTORY_CATEGORY, findOpt } from "@/lib/labels";
-import { adjustQuantity, recordPurchase, setToBuy } from "@/actions/inventory";
+import { INVENTORY_CATEGORY, STOCK_LEVEL, findOpt } from "@/lib/labels";
+import { adjustQuantity, recordPurchase, setLevel, setToBuy } from "@/actions/inventory";
 import { Empty, PageHeader } from "@/components/ui";
 
 export default async function ItemPage({ params }: { params: Promise<{ id: string }> }) {
@@ -16,14 +16,28 @@ export default async function ItemPage({ params }: { params: Promise<{ id: strin
     include: { supplier: true, purchases: { orderBy: { date: "desc" }, include: { supplier: true } } },
   });
   if (!item) notFound();
-  const low = item.quantity <= item.minQuantity;
+  const low = item.countable ? item.quantity <= item.minQuantity : item.level === "LOW" || item.level === "OUT";
   const price = item.currentPrice ?? item.lastPurchasePrice;
 
   return (
     <div className="space-y-4">
       <PageHeader title={item.name} subtitle={findOpt(INVENTORY_CATEGORY, item.category).label} back="/inventory" action={<Link href={`/inventory/${id}/edit`} className="btn-secondary">Изменить</Link>} />
 
-      <div className="card card-pad">
+      {!item.countable && (
+        <div className="card card-pad">
+          <div className="mb-2 text-sm text-ink-soft">Сколько осталось</div>
+          <div className="grid grid-cols-4 gap-2">
+            {STOCK_LEVEL.map((l) => (
+              <form key={l.value} action={setLevel.bind(null, id)}>
+                <input type="hidden" name="level" value={l.value} />
+                <button className={`h-12 w-full rounded-xl text-[15px] font-medium ring-1 ring-inset ${item.level === l.value ? l.cls : "bg-white text-ink-mute ring-zinc-200"}`}>{l.label}</button>
+              </form>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-ink-mute">Чтобы считать штуками — «Изменить» → включить «Считаем штуками».</p>
+        </div>
+      )}
+      <div className={`card card-pad ${item.countable ? "" : "hidden"}`}>
         <div className="flex items-center justify-between">
           <div>
             <div className="text-sm text-ink-soft">Остаток</div>

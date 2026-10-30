@@ -24,6 +24,9 @@ services:
     environment:
       DATABASE_URL: postgresql://dental:${POSTGRES_PASSWORD}@db:5432/dental
       TZ: Europe/Moscow
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      - uploads:/app/uploads
 
   caddy:
     image: caddy:2
@@ -44,12 +47,15 @@ services:
       PGPASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - ./backups:/backups
+      - uploads:/uploads:ro
     entrypoint: >
       sh -c 'while true; do
         pg_dump -h db -U dental dental | gzip > /backups/dental-$$(date +%F).sql.gz;
         find /backups -name "*.sql.gz" -mtime +14 -delete;
+        mkdir -p /backups/uploads && cp -a -u /uploads/. /backups/uploads/;
         sleep 86400; done'
 
 volumes:
   pgdata:
   caddy:
+  uploads:

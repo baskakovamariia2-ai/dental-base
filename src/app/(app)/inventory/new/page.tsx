@@ -10,9 +10,9 @@ export default async function NewItemPage({ searchParams }: { searchParams: Prom
   const suppliers = await prisma.supplier.findMany({ orderBy: { name: "asc" } });
   return (
     <div>
-      <PageHeader title="Новый товар" back="/inventory" />
+      <PageHeader title="Новая позиция" back="/inventory" />
       <ErrorNote show={!!error}>Укажите название</ErrorNote>
-      <ItemForm action={createItem} suppliers={suppliers} submitLabel="Добавить товар" />
+      <ItemForm action={createItem} suppliers={suppliers} submitLabel="Добавить" />
     </div>
   );
 }

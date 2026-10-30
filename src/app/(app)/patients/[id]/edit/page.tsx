@@ -19,11 +19,12 @@ export default async function EditPatientPage({
   const { error } = await searchParams;
   const patient = await prisma.patient.findUnique({ where: { id } });
   if (!patient) notFound();
+  const priceLists = await prisma.priceList.findMany({ orderBy: { createdAt: "asc" } });
   return (
     <div>
       <PageHeader title="Редактирование" subtitle={fullName(patient)} back={`/patients/${id}`} />
       <ErrorNote show={!!error}>Укажите имя и фамилию</ErrorNote>
-      <PatientForm action={updatePatient.bind(null, id)} patient={patient} submitLabel="Сохранить" />
+      <PatientForm action={updatePatient.bind(null, id)} patient={patient} submitLabel="Сохранить" priceLists={priceLists} />
 
       <div className="mt-10 border-t border-zinc-200 pt-6">
         <h2 className="section-title">Архив</h2>

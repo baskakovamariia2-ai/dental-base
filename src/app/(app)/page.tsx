@@ -1,64 +1,45 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
-import { addDays, startOfDay, startOfMonth, toISODate } from "@/lib/dates";
-import { fmtDate, fmtDateLong, fmtQty, fullName } from "@/lib/format";
+import { addDays, sameDay, startOfDay, startOfMonth } from "@/lib/dates";
+import { fmtDate, fmtDateLong } from "@/lib/format";
 import { addTask, toggleTask } from "@/actions/tasks";
 import { AppointmentRow } from "@/components/appointment-row";
 import { Empty, Stat } from "@/components/ui";
 import { IconBox, IconCalendar, IconPlus, IconTooth, IconUsers } from "@/components/icons";
 
-const ACTIVE_AP = { notIn: ["CANCELLED", "NO_SHOW", "DONE"] as ("CANCELLED" | "NO_SHOW" | "DONE")[] };
-
 export default async function Dashboard() {
   const user = await requireUser();
   const now = new Date();
   const today = startOfDay(now);
-  const tomorrow = addDays(today, 1);
 
-  const [todayAps, patients, lowStock, unconfirmed, tasks, newThisMonth] = await Promise.all([
+  // Ближайший приёмный день: сегодня, если есть записи, иначе следующий день с записями
+  const nextAp = await prisma.appointment.findFirst({
+    where: { startsAt: { gte: today }, status: { notIn: ["CANCELLED"] } },
+    orderBy: { startsAt: "asc" },
+  });
+  const day = nextAp ? startOfDay(nextAp.startsAt) : today;
+
+  const [dayAps, tasks, total, newThisMonth, active] = await Promise.all([
     prisma.appointment.findMany({
-      where: { startsAt: { gte: today, lt: tomorrow } },
+      where: { startsAt: { gte: day, lt: addDays(day, 1) } },
       include: { patient: true, doctor: true },
       orderBy: { startsAt: "asc" },
     }),
-    prisma.patient.findMany({
-      where: { archivedAt: null },
-      select: {
-        id: true, firstName: true, lastName: true, status: true,
-        appointments: { where: { startsAt: { gte: now }, status: ACTIVE_AP }, select: { id: true }, take: 1 },
-        treatmentItems: { where: { status: { in: ["PLANNED", "IN_PROGRESS"] } }, select: { price: true } },
-      },
-    }),
-    prisma.$queryRaw<{ id: string; name: string; quantity: number; minQuantity: number; unit: string }[]>`
-      SELECT id, name, quantity, "minQuantity", unit FROM "InventoryItem"
-      WHERE "archivedAt" IS NULL AND quantity <= "minQuantity" ORDER BY quantity ASC LIMIT 20`,
-    prisma.appointment.findMany({
-      where: { status: "SCHEDULED", startsAt: { gte: now, lt: addDays(today, 8) } },
-      include: { patient: true },
-      orderBy: { startsAt: "asc" },
-      take: 10,
-    }),
     prisma.task.findMany({ where: { done: false }, orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }], take: 20 }),
+    prisma.patient.count({ where: { archivedAt: null } }),
     prisma.patient.count({ where: { archivedAt: null, createdAt: { gte: startOfMonth(now) } } }),
+    prisma.patient.count({ where: { archivedAt: null, status: "IN_TREATMENT" } }),
   ]);
-
-  const needNext = patients.filter(
-    (p) => (p.status === "IN_TREATMENT" || p.status === "NEW" || p.treatmentItems.length > 0) && p.appointments.length === 0,
-  );
-  const openPlans = patients.filter((p) => p.treatmentItems.length > 0);
-  const active = patients.filter((p) => p.status === "IN_TREATMENT").length;
-  const outOfStock = lowStock.filter((i) => i.quantity <= 0);
-  const low = lowStock.filter((i) => i.quantity > 0);
 
   const quick = [
     { href: "/patients/new", label: "Новый пациент", Icon: IconUsers },
     { href: "/schedule/new", label: "Новая запись", Icon: IconCalendar },
     { href: "/visits/new", label: "Добавить приём", Icon: IconTooth },
-    { href: "/inventory/new", label: "Добавить товар", Icon: IconBox },
+    { href: "/inventory/new", label: "Добавить в инвентарь", Icon: IconBox },
   ];
 
-  const attentionCount = outOfStock.length + needNext.length + low.length + unconfirmed.length + openPlans.length;
+  const dayTitle = sameDay(day, today) ? "Сегодня" : sameDay(day, addDays(today, 1)) ? "Завтра" : fmtDateLong(day);
 
   return (
     <div className="space-y-7">
@@ -70,9 +51,7 @@ export default async function Dashboard() {
       <section className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
         {quick.map(({ href, label, Icon }) => (
           <Link key={href} href={href} className="card flex min-h-[64px] items-center gap-3 px-4 py-3 text-[15px] font-medium transition hover:ring-accent/30 active:scale-[0.98]">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent">
-              <Icon />
-            </span>
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent"><Icon /></span>
             <span className="leading-tight">{label}</span>
           </Link>
         ))}
@@ -80,39 +59,18 @@ export default async function Dashboard() {
 
       <section>
         <div className="mb-3 flex items-baseline justify-between">
-          <h2 className="section-title mb-0">Сегодня · {todayAps.length}</h2>
-          <Link href={`/schedule?view=day&date=${toISODate(today)}`} className="text-sm text-accent">Расписание</Link>
+          <h2 className="section-title mb-0 normal-case">
+            <span className="uppercase">Ближайший приём</span> · <span className="capitalize">{dayTitle}</span> · {dayAps.length}
+          </h2>
+          <Link href="/schedule" className="text-sm text-accent">Все записи</Link>
         </div>
-        {todayAps.length === 0 ? (
-          <Empty>На сегодня записей нет</Empty>
+        {dayAps.length === 0 ? (
+          <Empty>Предстоящих записей нет. <Link href="/schedule/new" className="text-accent">Записать пациента</Link></Empty>
         ) : (
           <div className="card divide-y divide-zinc-100">
-            {todayAps.map((a) => <AppointmentRow key={a.id} a={a} returnTo="/" />)}
+            {dayAps.map((a) => <AppointmentRow key={a.id} a={a} returnTo="/" />)}
           </div>
         )}
-      </section>
-
-      <section>
-        <h2 className="section-title">Требует внимания{attentionCount ? ` · ${attentionCount}` : ""}</h2>
-        <div className="card divide-y divide-zinc-100">
-          {outOfStock.map((i) => (
-            <Alert key={i.id} level="red" href={`/inventory/${i.id}`} title={`Закончился: ${i.name}`} hint="Критично · остаток 0" />
-          ))}
-          {needNext.slice(0, 8).map((p) => (
-            <Alert key={p.id} level="orange" href={`/schedule/new?patient=${p.id}`} title={fullName(p)} hint="Нет следующей записи — назначить приём" />
-          ))}
-          {needNext.length > 8 && <Alert level="orange" href="/patients?filter=nonext" title={`Ещё ${needNext.length - 8} пациентов без записи`} hint="Открыть список" />}
-          {low.map((i) => (
-            <Alert key={i.id} level="yellow" href={`/inventory/${i.id}`} title={i.name} hint={`Заканчивается · осталось ${fmtQty(i.quantity)} ${i.unit} (мин. ${fmtQty(i.minQuantity)})`} />
-          ))}
-          {unconfirmed.map((a) => (
-            <Alert key={a.id} level="yellow" href={`/schedule?view=day&date=${toISODate(a.startsAt)}`} title={`Не подтверждена: ${fullName(a.patient)}`} hint={`${fmtDate(a.startsAt)} · ${a.procedure}`} />
-          ))}
-          {openPlans.slice(0, 5).map((p) => (
-            <Alert key={p.id} level="gray" href={`/patients/${p.id}?tab=plan`} title={fullName(p)} hint={`Незавершённый план лечения · ${p.treatmentItems.length} поз.`} />
-          ))}
-          {attentionCount === 0 && <p className="px-4 py-5 text-center text-sm text-ink-mute">Всё в порядке 👌</p>}
-        </div>
       </section>
 
       <section>
@@ -136,25 +94,12 @@ export default async function Dashboard() {
       <section>
         <h2 className="section-title">Кратко</h2>
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-          <Stat label="Пациентов всего" value={patients.length} />
+          <Stat label="Пациентов всего" value={total} />
           <Stat label="Новых за месяц" value={newThisMonth} />
           <Stat label="В активном лечении" value={active} />
-          <Stat label="Приёмов сегодня" value={todayAps.filter((a) => a.status !== "CANCELLED").length} />
+          <Stat label={sameDay(day, today) ? "Приёмов сегодня" : "В ближайший день"} value={dayAps.filter((a) => a.status !== "CANCELLED").length} />
         </div>
       </section>
     </div>
-  );
-}
-
-function Alert({ level, title, hint, href }: { level: "red" | "orange" | "yellow" | "gray"; title: string; hint: string; href: string }) {
-  const dot = { red: "bg-rose-500", orange: "bg-orange-500", yellow: "bg-amber-400", gray: "bg-zinc-300" }[level];
-  return (
-    <Link href={href} className="flex items-center gap-3 px-4 py-3 hover:bg-zinc-50">
-      <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${dot}`} />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-[15px]">{title}</span>
-        <span className="block truncate text-xs text-ink-mute">{hint}</span>
-      </span>
-    </Link>
   );
 }

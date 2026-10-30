@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { Appointment, Patient, User } from "@prisma/client";
 import { setAppointmentStatus, toggleReminder } from "@/actions/appointments";
 import { APPOINTMENT_STATUS } from "@/lib/labels";
-import { fmtTime, fullName } from "@/lib/format";
+import { fmtTime, fullName, telegramHref } from "@/lib/format";
 import { AutoSubmitSelect } from "./auto-submit";
 
 export type AppointmentWith = Appointment & { patient: Patient; doctor: User | null };
@@ -42,6 +42,11 @@ export function AppointmentRow({ a, returnTo, showDate }: { a: AppointmentWith; 
               {a.reminderSent ? "✓ Напоминание отправлено" : "Напомнить пациенту"}
             </button>
           </form>
+          {telegramHref(a.patient) && (
+            <a href={telegramHref(a.patient)!} target="_blank" rel="noopener noreferrer" className="rounded-lg bg-sky-50 px-2.5 py-1.5 text-xs font-medium text-[#229ED9]">
+              Telegram
+            </a>
+          )}
           <Link href={`/schedule/${a.id}`} className="rounded-lg px-2 py-1.5 text-xs text-ink-mute hover:bg-zinc-100">
             Изменить
           </Link>

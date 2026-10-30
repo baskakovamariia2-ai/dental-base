@@ -17,20 +17,17 @@ export async function createDemoData() {
     return d;
   };
 
-  // Общий прайс клиники
-  if ((await prisma.service.count()) === 0) {
-    await prisma.service.createMany({
-      data: [
-        { name: "Диагностика", price: 1500, category: "Диагностика" },
-        { name: "Лечение кариеса", price: 7000, category: "Терапия" },
-        { name: "Композитная реставрация", price: 8000, category: "Терапия" },
-        { name: "Реставрация (сложная)", price: 12000, category: "Терапия" },
-        { name: "Профессиональная гигиена", price: 5000, category: "Гигиена" },
-        { name: "Удаление", price: 4000, category: "Хирургия" },
-        { name: "Имплантация", price: 45000, category: "Хирургия" },
-        { name: "Коронка", price: 25000, category: "Ортопедия" },
-      ],
+  // Версия прайса
+  let priceListId: string | null = (await prisma.priceList.findFirst({ where: { isDefault: true } }))?.id ?? null;
+  if (!priceListId) {
+    const text = "Консультация — 1 500 ₽\nЛечение кариеса — 7 000 ₽\nПломба — 7 000 ₽\nЛечение каналов + пломба — 15 000 ₽\nРеставрация — 12 000 ₽\nПрофессиональная гигиена — 5 000 ₽\nУдаление — 4 000 ₽\nКоронка — 25 000 ₽";
+    const list = await prisma.priceList.create({ data: { name: DEMO_TAG + "Прайс", text, isDefault: true } });
+    const lines = text.split("\n").map((l, i) => {
+      const [name, price] = l.split(" — ");
+      return { priceListId: list.id, name, price: Number(price.replace(/\D/g, "")), sortOrder: i };
     });
+    await prisma.priceListItem.createMany({ data: lines });
+    priceListId = list.id;
   }
 
   type T = [number, ToothStatus, string?, string?, number?];
@@ -65,15 +62,12 @@ export async function createDemoData() {
     const patient = await prisma.patient.create({
       data: {
         firstName: p.firstName, lastName: p.lastName, phone: p.phone, source: p.source, status: p.status,
-        notes: p.notes, isDemo: true, firstVisitDate: addDays(today, -60 + i * 20),
+        notes: p.notes, isDemo: true, firstVisitDate: addDays(today, -60 + i * 20), priceListId,
       },
     });
     for (const [number, status, diagnosis, treatment, price] of p.teeth) {
       await prisma.tooth.create({
-        data: {
-          patientId: patient.id, number, status, diagnosis, treatment, price,
-          treatmentStatus: status === "FILLING" && treatment ? "DONE" : treatment ? "PLANNED" : null,
-        },
+        data: { patientId: patient.id, number, status, diagnosis },
       });
     }
     if (i === 0) {
@@ -138,4 +132,5 @@ export async function removeDemoData() {
   await prisma.inventoryItem.deleteMany({ where: { name: { startsWith: DEMO_TAG } } });
   await prisma.supplier.deleteMany({ where: { name: { startsWith: DEMO_TAG } } });
   await prisma.task.deleteMany({ where: { title: { startsWith: DEMO_TAG } } });
+  await prisma.priceList.deleteMany({ where: { name: { startsWith: DEMO_TAG } } });
 }

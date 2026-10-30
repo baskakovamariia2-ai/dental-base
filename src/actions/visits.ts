@@ -27,7 +27,7 @@ export async function createVisit(formData: FormData) {
   const patientId = str(formData, "patientId", 50);
   if (!patientId) redirect("/visits/new?error=patient");
   const data = readVisit(formData);
-  await prisma.visit.create({ data: { ...data, doctorId: data.doctorId ?? user.id, patientId } });
+  await prisma.visit.create({ data: { ...data, doctorId: data.doctorId ?? (await prisma.user.findFirst({ where: { role: "DOCTOR", isActive: true } }))?.id ?? user.id, patientId } });
   // Завершаем сегодняшнюю запись пациента, если она была
   if (formData.get("closeAppointment")) {
     const apId = str(formData, "closeAppointment", 50);

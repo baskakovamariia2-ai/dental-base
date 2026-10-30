@@ -8,7 +8,7 @@ const items = [
   { href: "/", label: "Главная", Icon: IconHome },
   { href: "/patients", label: "Пациенты", Icon: IconUsers },
   { href: "/schedule", label: "Расписание", Icon: IconCalendar },
-  { href: "/inventory", label: "Склад", Icon: IconBox },
+  { href: "/inventory", label: "Инвентарь", Icon: IconBox },
   { href: "/more", label: "Ещё", Icon: IconMore },
 ];
 

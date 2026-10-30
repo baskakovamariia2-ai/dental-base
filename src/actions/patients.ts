@@ -14,6 +14,8 @@ function readPatient(fd: FormData) {
     lastName: str(fd, "lastName", 100),
     middleName: optStr(fd, "middleName", 100),
     phone: optStr(fd, "phone", 40),
+    telegram: optStr(fd, "telegram", 100),
+    priceListId: optStr(fd, "priceListId", 50),
     birthDate: parseISODate(str(fd, "birthDate")),
     firstVisitDate: parseISODate(str(fd, "firstVisitDate")),
     source: oneOf(fd, "source", values(PATIENT_SOURCE), "OTHER"),
@@ -39,6 +41,12 @@ export async function updatePatient(id: string, formData: FormData) {
   await prisma.patient.update({ where: { id }, data });
   revalidatePath("/", "layout");
   redirect(`/patients/${id}`);
+}
+
+export async function setPatientPriceList(id: string, formData: FormData) {
+  await requireUser();
+  await prisma.patient.update({ where: { id }, data: { priceListId: optStr(formData, "priceListId", 50) } });
+  revalidatePath(`/patients/${id}`);
 }
 
 export async function setPatientStatus(id: string, formData: FormData) {

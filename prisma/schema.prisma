@@ -67,12 +67,15 @@ model Patient {
   lastName       String
   middleName     String?
   phone          String?
+  telegram       String? // @username (если пусто — Telegram по номеру телефона)
   birthDate      DateTime?
   firstVisitDate DateTime?
   source         PatientSource  @default(OTHER)
   sourceComment  String?
   status         PatientStatus  @default(NEW)
   notes          String?
+  priceListId    String?
+  priceList      PriceList?     @relation(fields: [priceListId], references: [id], onDelete: SetNull)
   isDemo         Boolean        @default(false)
   archivedAt     DateTime?
   createdAt      DateTime       @default(now())
@@ -228,7 +231,30 @@ model PatientPrice {
   @@index([patientId])
 }
 
-// ───────────── Файлы (этап 2): в БД только метаданные ─────────────
+// ───────────── Версии прайса (текст + распознанные позиции) ─────────────
+
+model PriceList {
+  id        String          @id @default(cuid())
+  name      String
+  text      String
+  isDefault Boolean         @default(false)
+  createdAt DateTime        @default(now())
+  items     PriceListItem[]
+  patients  Patient[]
+}
+
+model PriceListItem {
+  id          String    @id @default(cuid())
+  priceListId String
+  priceList   PriceList @relation(fields: [priceListId], references: [id], onDelete: Cascade)
+  name        String
+  price       Int
+  sortOrder   Int       @default(0)
+
+  @@index([priceListId])
+}
+
+// ───────────── Файлы: в БД только метаданные, сами файлы — на диске ─────────────
 
 enum FileCategory {
   CT
@@ -247,7 +273,9 @@ model PatientFile {
   date        DateTime     @default(now())
   comment     String?
   photoTag    String? // до / после / зуб N / другое
-  storageKey  String // ключ объекта в S3-хранилище
+  storageKey  String       @default("") // путь к файлу в хранилище (пусто, если это ссылка)
+  url         String? // ссылка (например, на сообщение в Telegram с КТ)
+  fileName    String?
   mimeType    String?
   sizeBytes   BigInt?
   createdAt   DateTime     @default(now())
@@ -278,6 +306,13 @@ enum InventoryCategory {
   OTHER
 }
 
+enum StockLevel {
+  PLENTY
+  ENOUGH
+  LOW
+  OUT
+}
+
 model Supplier {
   id        String          @id @default(cuid())
   name      String          @unique
@@ -303,6 +338,8 @@ model InventoryItem {
   url               String?
   comment           String?
   toBuyQuantity     Float? // если задано — товар в списке «Закупить»
+  countable         Boolean           @default(true) // false — считаем уровнем (много/мало)
+  level             StockLevel?
   archivedAt        DateTime?
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt

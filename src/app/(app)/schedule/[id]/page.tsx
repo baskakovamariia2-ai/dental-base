@@ -2,7 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
-import { fullName, phoneHref, whatsappHref } from "@/lib/format";
+import { getDoctors } from "@/lib/doctors";
+import { fullName, phoneHref, telegramHref } from "@/lib/format";
 import { deleteAppointment, toggleReminder, updateAppointment } from "@/actions/appointments";
 import { ConfirmButton } from "@/components/auto-submit";
 import { ErrorNote, PageHeader } from "@/components/ui";
@@ -20,7 +21,7 @@ export default async function EditAppointmentPage({
   const { error } = await searchParams;
   const [ap, doctors] = await Promise.all([
     prisma.appointment.findUnique({ where: { id }, include: { patient: true } }),
-    prisma.user.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
+    getDoctors(),
   ]);
   if (!ap) notFound();
 
@@ -35,12 +36,10 @@ export default async function EditAppointmentPage({
           <span className={`badge ${ap.reminderSent ? "bg-emerald-50 text-emerald-700 ring-emerald-200" : "bg-zinc-100 text-zinc-600 ring-zinc-200"}`}>
             {ap.reminderSent ? "Напоминание отправлено" : "Напоминание не отправлено"}
           </span>
-          {ap.patient.phone && (
-            <>
-              <a href={whatsappHref(ap.patient.phone)} target="_blank" rel="noopener noreferrer" className="btn-secondary btn-sm">Написать в WhatsApp</a>
-              <a href={phoneHref(ap.patient.phone)} className="btn-secondary btn-sm">Позвонить</a>
-            </>
+          {telegramHref(ap.patient) && (
+            <a href={telegramHref(ap.patient)!} target="_blank" rel="noopener noreferrer" className="btn-secondary btn-sm">Написать в Telegram</a>
           )}
+          {ap.patient.phone && <a href={phoneHref(ap.patient.phone)} className="btn-secondary btn-sm">Позвонить</a>}
           <form action={toggleReminder.bind(null, ap.id)}>
             <input type="hidden" name="returnTo" value={`/schedule/${ap.id}`} />
             <button className="btn-primary btn-sm">{ap.reminderSent ? "Снять отметку" : "Отметить: напомнили"}</button>
@@ -49,7 +48,7 @@ export default async function EditAppointmentPage({
       </div>
 
       <form action={updateAppointment.bind(null, ap.id)} className="space-y-4">
-        <AppointmentFields ap={ap} doctors={doctors} defaultDoctorId={user.id} defaultStart={ap.startsAt} />
+        <AppointmentFields ap={ap} doctors={doctors} defaultDoctorId={doctors[0]?.id ?? user.id} defaultStart={ap.startsAt} />
         <button className="btn-primary w-full sm:w-auto">Сохранить</button>
       </form>
       <form action={deleteAppointment.bind(null, ap.id)} className="mt-8">

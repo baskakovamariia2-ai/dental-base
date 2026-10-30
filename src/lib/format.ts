@@ -44,3 +44,19 @@ export function whatsappHref(phone: string) {
   if (digits.startsWith("8") && digits.length === 11) digits = "7" + digits.slice(1);
   return `https://wa.me/${digits}`;
 }
+
+/** Ссылка в Telegram: по @username или по номеру телефона */
+export function telegramHref(p: { telegram?: string | null; phone?: string | null }) {
+  const u = p.telegram?.trim().replace(/^@/, "").replace(/^https?:\/\/t\.me\//, "");
+  if (u) return `https://t.me/${u}`;
+  if (!p.phone) return null;
+  let digits = p.phone.replace(/\D/g, "");
+  if (digits.startsWith("8") && digits.length === 11) digits = "7" + digits.slice(1);
+  return `https://t.me/+${digits}`;
+}
+
+export function fileSize(bytes: number | bigint | null | undefined) {
+  const b = Number(bytes ?? 0);
+  if (b < 1024 * 1024) return `${Math.max(1, Math.round(b / 1024))} КБ`;
+  return `${(b / 1024 / 1024).toFixed(1).replace(".", ",")} МБ`;
+}

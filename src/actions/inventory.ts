@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { num, oneOf, optInt, optStr, str } from "@/lib/forms";
+import type { ParsedStock } from "@/lib/parse-lists";
 import { parseISODate } from "@/lib/dates";
 import { INVENTORY_CATEGORY, values } from "@/lib/labels";
 
@@ -27,6 +28,8 @@ function readItem(fd: FormData) {
     lastPurchaseDate: parseISODate(str(fd, "lastPurchaseDate")),
     url: optStr(fd, "url", 500),
     comment: optStr(fd, "comment", 2000),
+    countable: fd.get("countable") === "on",
+    level: fd.get("countable") === "on" ? null : oneOf(fd, "level", ["PLENTY", "ENOUGH", "LOW", "OUT"] as const, "ENOUGH"),
   };
 }
 
@@ -106,4 +109,39 @@ export async function archiveItem(id: string) {
   await prisma.inventoryItem.update({ where: { id }, data: { archivedAt: new Date() } });
   refresh();
   redirect("/inventory");
+}
+
+/** Уровень для того, что нельзя сосчитать: много / есть / мало / нет */
+export async function setLevel(id: string, formData: FormData) {
+  await requireUser();
+  const level = oneOf(formData, "level", ["PLENTY", "ENOUGH", "LOW", "OUT"] as const, "ENOUGH");
+  await prisma.inventoryItem.update({ where: { id }, data: { level, countable: false } });
+  refresh();
+}
+
+/** Добавить список (надиктованный или вставленный текстом) */
+export async function importInventory(payload: string) {
+  await requireUser();
+  let rows: ParsedStock[] = [];
+  try {
+    rows = JSON.parse(payload);
+  } catch {
+    return;
+  }
+  for (const r of rows.slice(0, 200)) {
+    const name = String(r.name ?? "").trim().slice(0, 200);
+    if (!name) continue;
+    const countable = r.quantity !== null && r.quantity !== undefined;
+    const data = {
+      countable,
+      quantity: countable ? Math.max(0, Number(r.quantity) || 0) : 0,
+      unit: (countable && r.unit ? String(r.unit).slice(0, 30) : null) ?? "шт.",
+      level: countable ? null : (["PLENTY", "ENOUGH", "LOW", "OUT"] as const).find((l) => l === r.level) ?? "ENOUGH",
+      comment: r.comment ? String(r.comment).slice(0, 500) : null,
+    };
+    const existing = await prisma.inventoryItem.findFirst({ where: { archivedAt: null, name: { equals: name, mode: "insensitive" } } });
+    if (existing) await prisma.inventoryItem.update({ where: { id: existing.id }, data });
+    else await prisma.inventoryItem.create({ data: { name, ...data } });
+  }
+  refresh();
 }

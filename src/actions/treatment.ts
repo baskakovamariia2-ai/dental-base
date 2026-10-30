@@ -6,6 +6,7 @@ import { requireUser } from "@/lib/auth";
 import { int, optInt, optStr, oneOf, str } from "@/lib/forms";
 import { TREATMENT_STATUS, values } from "@/lib/labels";
 import { isValidTooth } from "@/lib/teeth";
+import { syncToothWithPlan } from "@/lib/plan";
 
 function refresh(patientId: string) {
   revalidatePath(`/patients/${patientId}`);
@@ -14,20 +15,29 @@ function refresh(patientId: string) {
 
 export async function addTreatmentItem(patientId: string, formData: FormData) {
   await requireUser();
-  const tooth = optInt(formData, "toothNumber");
+  const raw = optInt(formData, "toothNumber");
+  const tooth = raw !== null && isValidTooth(raw) ? raw : null;
   const treatment = str(formData, "treatment", 300);
   if (!treatment) return;
+  let diagnosis = optStr(formData, "diagnosis", 300);
+  if (!diagnosis && tooth !== null) {
+    const t = await prisma.tooth.findUnique({ where: { patientId_number: { patientId, number: tooth } } });
+    diagnosis = t?.diagnosis ?? null;
+  }
+  const maxOrder = await prisma.treatmentItem.aggregate({ where: { patientId }, _max: { sortOrder: true } });
   await prisma.treatmentItem.create({
     data: {
       patientId,
-      toothNumber: tooth !== null && isValidTooth(tooth) ? tooth : null,
-      diagnosis: optStr(formData, "diagnosis", 300),
+      toothNumber: tooth,
+      diagnosis,
       treatment,
       price: Math.max(0, int(formData, "price")),
       paid: Math.max(0, int(formData, "paid")),
       status: oneOf(formData, "status", values(TREATMENT_STATUS), "PLANNED"),
+      sortOrder: (maxOrder._max.sortOrder ?? 0) + 1,
     },
   });
+  await syncToothWithPlan(patientId, tooth);
   refresh(patientId);
 }
 
@@ -39,13 +49,21 @@ export async function updateTreatmentItem(id: string, formData: FormData) {
   if (formData.get("markPaid") === "1") paid = item.price;
   await prisma.treatmentItem.update({
     where: { id },
-    data: { status, paid, price: Math.max(0, int(formData, "price", item.price)) },
+    data: {
+      status,
+      paid,
+      price: Math.max(0, int(formData, "price", item.price)),
+      treatment: str(formData, "treatment", 300) || item.treatment,
+      diagnosis: formData.has("diagnosis") ? optStr(formData, "diagnosis", 300) : item.diagnosis,
+    },
   });
+  await syncToothWithPlan(item.patientId, item.toothNumber);
   refresh(item.patientId);
 }
 
 export async function deleteTreatmentItem(id: string) {
   await requireUser();
   const item = await prisma.treatmentItem.delete({ where: { id } });
+  await syncToothWithPlan(item.patientId, item.toothNumber);
   refresh(item.patientId);
 }

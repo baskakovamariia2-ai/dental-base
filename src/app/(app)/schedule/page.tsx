@@ -8,18 +8,21 @@ import { AppointmentRow, type AppointmentWith } from "@/components/appointment-r
 import { Empty, PageHeader } from "@/components/ui";
 import { IconBack, IconChevron, IconPlus } from "@/components/icons";
 
-type View = "day" | "week" | "month";
+type View = "upcoming" | "day" | "week" | "month";
 const WD = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 
 export default async function SchedulePage({ searchParams }: { searchParams: Promise<{ view?: string; date?: string }> }) {
   await requireUser();
   const sp = await searchParams;
-  const view: View = sp.view === "week" || sp.view === "month" ? sp.view : "day";
+  const view: View = sp.view === "week" || sp.view === "month" || sp.view === "day" ? sp.view : "upcoming";
   const date = parseISODate(sp.date) ?? startOfDay(new Date());
   const today = startOfDay(new Date());
 
   let from: Date, to: Date, prev: Date, next: Date, title: string;
-  if (view === "day") {
+  if (view === "upcoming") {
+    from = today; to = addDays(today, 120); prev = today; next = today;
+    title = "Предстоящие записи";
+  } else if (view === "day") {
     from = date; to = addDays(date, 1); prev = addDays(date, -1); next = addDays(date, 1);
     title = fmtDateLong(date);
   } else if (view === "week") {
@@ -38,7 +41,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
     orderBy: { startsAt: "asc" },
   });
 
-  const link = (v: View, d: Date) => `/schedule?view=${v}&date=${toISODate(d)}`;
+  const link = (v: View, d: Date) => (v === "upcoming" ? "/schedule" : `/schedule?view=${v}&date=${toISODate(d)}`);
   const returnTo = link(view, date);
 
   return (
@@ -49,21 +52,43 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       />
 
       <div className="mb-4 flex rounded-xl bg-zinc-200/60 p-1">
-        {(["day", "week", "month"] as View[]).map((v) => (
-          <Link key={v} href={link(v, date)} className={`flex-1 rounded-lg py-2 text-center text-sm font-medium ${view === v ? "bg-white shadow-card" : "text-ink-soft"}`}>
-            {{ day: "День", week: "Неделя", month: "Месяц" }[v]}
+        {(["upcoming", "day", "week", "month"] as View[]).map((v) => (
+          <Link key={v} href={link(v, date)} className={`flex-1 rounded-lg py-2 text-center text-[13px] font-medium sm:text-sm ${view === v ? "bg-white shadow-card" : "text-ink-soft"}`}>
+            {{ upcoming: "Ближайшие", day: "День", week: "Неделя", month: "Месяц" }[v]}
           </Link>
         ))}
       </div>
 
+      {view !== "upcoming" && (
       <div className="mb-4 flex items-center gap-2">
         <Link href={link(view, prev)} className="btn-secondary h-11 w-11 px-0" aria-label="Назад"><IconBack /></Link>
         <div className="flex-1 text-center text-[17px] font-semibold capitalize">{title}</div>
         <Link href={link(view, next)} className="btn-secondary h-11 w-11 px-0" aria-label="Вперёд"><IconChevron /></Link>
       </div>
-      {!(view === "day" && sameDay(date, today)) && (
+      )}
+      {view !== "upcoming" && !(view === "day" && sameDay(date, today)) && (
         <div className="mb-4 text-center"><Link href={link(view, today)} className="text-sm text-accent">Сегодня</Link></div>
       )}
+
+      {view === "upcoming" &&
+        (aps.length === 0 ? (
+          <Empty>Предстоящих записей нет. <Link className="text-accent" href="/schedule/new">Добавить запись</Link></Empty>
+        ) : (
+          <div className="space-y-5">
+            {[...new Set(aps.map((a) => toISODate(a.startsAt)))].map((d) => {
+              const list = aps.filter((a) => toISODate(a.startsAt) === d);
+              const dd = parseISODate(d)!;
+              return (
+                <section key={d}>
+                  <Link href={link("day", dd)} className="mb-2 block px-1 text-sm font-semibold capitalize text-ink-soft">
+                    {sameDay(dd, today) ? "Сегодня, " : ""}{fmtDateLong(dd)} · {list.length}
+                  </Link>
+                  <div className="card divide-y divide-zinc-100">{list.map((a) => <AppointmentRow key={a.id} a={a} returnTo="/schedule" />)}</div>
+                </section>
+              );
+            })}
+          </div>
+        ))}
 
       {view === "day" &&
         (aps.length === 0 ? (

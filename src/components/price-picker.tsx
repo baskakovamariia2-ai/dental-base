@@ -24,19 +24,11 @@ export function TreatmentPriceFields({ prices, nameField = "treatment" }: { pric
             }}
           >
             <option value="">— выбрать услугу —</option>
-            {["Прайс пациента", "Прайс клиники"].map((g) => {
-              const items = prices.map((p, i) => ({ p, i })).filter(({ p }) => p.group === g);
-              if (!items.length) return null;
-              return (
-                <optgroup key={g} label={g}>
-                  {items.map(({ p, i }) => (
-                    <option key={i} value={i}>
-                      {p.name} — {p.price.toLocaleString("ru-RU")} ₽
-                    </option>
-                  ))}
-                </optgroup>
-              );
-            })}
+            {prices.map((p, i) => (
+              <option key={i} value={i}>
+                {p.name} — {p.price.toLocaleString("ru-RU")} ₽
+              </option>
+            ))}
           </select>
         </label>
       )}

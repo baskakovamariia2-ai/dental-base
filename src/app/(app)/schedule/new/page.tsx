@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
+import { getDoctors } from "@/lib/doctors";
 import { parseISODate } from "@/lib/dates";
 import { fullName } from "@/lib/format";
 import { createAppointment } from "@/actions/appointments";
@@ -28,7 +29,7 @@ export default async function NewAppointmentPage({
 
   const [patient, doctors] = await Promise.all([
     prisma.patient.findUnique({ where: { id: patientId } }),
-    prisma.user.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
+    getDoctors(),
   ]);
   if (!patient) notFound();
 
@@ -45,7 +46,7 @@ export default async function NewAppointmentPage({
       <ErrorNote show={!!error}>Укажите дату, время и процедуру</ErrorNote>
       <form action={createAppointment} className="space-y-4">
         <input type="hidden" name="patientId" value={patient.id} />
-        <AppointmentFields doctors={doctors} defaultDoctorId={user.id} defaultStart={start} />
+        <AppointmentFields doctors={doctors} defaultDoctorId={doctors[0]?.id ?? user.id} defaultStart={start} />
         <button className="btn-primary w-full sm:w-auto">Записать</button>
       </form>
     </div>

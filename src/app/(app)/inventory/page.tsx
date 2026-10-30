@@ -4,8 +4,8 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { fmtQty, money } from "@/lib/format";
 import { toISODate } from "@/lib/dates";
-import { INVENTORY_CATEGORY, findOpt } from "@/lib/labels";
-import { adjustQuantity, recordPurchase, setToBuy } from "@/actions/inventory";
+import { INVENTORY_CATEGORY, STOCK_LEVEL, findOpt } from "@/lib/labels";
+import { adjustQuantity, recordPurchase, setLevel, setToBuy } from "@/actions/inventory";
 import { Empty, PageHeader } from "@/components/ui";
 import { IconPlus, IconSearch } from "@/components/icons";
 
@@ -23,8 +23,9 @@ export default async function InventoryPage({
   if (tab === "buy") where.toBuyQuantity = { not: null };
 
   const all = await prisma.inventoryItem.findMany({ where, orderBy: [{ category: "asc" }, { name: "asc" }], include: { supplier: true } });
-  const items = tab === "low" ? all.filter((i) => i.quantity <= i.minQuantity) : all;
-  const lowCount = (await prisma.$queryRaw<{ c: bigint }[]>`SELECT count(*) AS c FROM "InventoryItem" WHERE "archivedAt" IS NULL AND quantity <= "minQuantity"`)[0]?.c ?? 0n;
+  const isLow = (i: { countable: boolean; quantity: number; minQuantity: number; level: string | null }) => (i.countable ? i.quantity <= i.minQuantity : i.level === "LOW" || i.level === "OUT");
+  const items = tab === "low" ? all.filter(isLow) : all;
+  const lowCount = (await prisma.inventoryItem.findMany({ where: { archivedAt: null } })).filter(isLow).length;
   const buyCount = await prisma.inventoryItem.count({ where: { archivedAt: null, toBuyQuantity: { not: null } } });
   const buyTotal = items.reduce((s, i) => s + (i.toBuyQuantity ?? 0) * (i.currentPrice ?? i.lastPurchasePrice ?? 0), 0);
 
@@ -37,7 +38,15 @@ export default async function InventoryPage({
 
   return (
     <div>
-      <PageHeader title="Склад" action={<Link href="/inventory/new" className="btn-accent"><IconPlus /> <span className="hidden sm:inline">Добавить товар</span></Link>} />
+      <PageHeader
+        title="Инвентарь"
+        action={
+          <div className="flex gap-2">
+            <Link href="/inventory/import" className="btn-secondary">🎙 <span className="hidden sm:inline">Списком / голосом</span></Link>
+            <Link href="/inventory/new" className="btn-accent"><IconPlus /> <span className="hidden sm:inline">Добавить</span></Link>
+          </div>
+        }
+      />
 
       <div className="mb-3 flex rounded-xl bg-zinc-200/60 p-1">
         {tabs.map((t) => (
@@ -69,27 +78,41 @@ export default async function InventoryPage({
       )}
 
       {items.length === 0 ? (
-        <Empty>{tab === "buy" ? "Список закупок пуст. Добавляйте товары кнопкой «В закупку»." : tab === "low" ? "Всего достаточно 👌" : "Товаров пока нет"}</Empty>
+        <Empty>{tab === "buy" ? "Список закупок пуст. Добавляйте позиции во вкладке «Нужно заказать»." : tab === "low" ? "Всего достаточно 👌" : "Пока пусто. Нажмите 🎙, чтобы добавить всё списком."}</Empty>
       ) : (
         <div className="card divide-y divide-zinc-100">
           {items.map((i) => {
-            const low = i.quantity <= i.minQuantity;
-            const out = i.quantity <= 0;
+            const low = isLow(i);
+            const out = i.countable ? i.quantity <= 0 : i.level === "OUT";
             const price = i.currentPrice ?? i.lastPurchasePrice;
             return (
               <div key={i.id} className="px-4 py-3">
-                <div className="flex items-start gap-3">
+                <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
                   <Link href={`/inventory/${i.id}`} className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       {low && <span className={`h-2 w-2 shrink-0 rounded-full ${out ? "bg-rose-500" : "bg-amber-400"}`} />}
                       <span className="truncate text-[15px] font-medium">{i.name}</span>
                     </div>
                     <div className="truncate text-xs text-ink-mute">
-                      {findOpt(INVENTORY_CATEGORY, i.category).label} · мин. {fmtQty(i.minQuantity)} {i.unit}
+                      {findOpt(INVENTORY_CATEGORY, i.category).label}
+                      {i.countable ? ` · мин. ${fmtQty(i.minQuantity)} ${i.unit}` : ""}
                       {price ? ` · ${money(price)}` : ""}
+                      {i.comment ? ` · ${i.comment}` : ""}
                     </div>
                   </Link>
-                  {tab !== "buy" && (
+                  {tab !== "buy" && !i.countable && (
+                    <div className="flex w-full gap-1.5">
+                      {STOCK_LEVEL.map((l) => (
+                        <form key={l.value} action={setLevel.bind(null, i.id)}>
+                          <input type="hidden" name="level" value={l.value} />
+                          <button className={`h-9 min-w-[60px] rounded-lg px-3 text-[13px] font-medium ring-1 ring-inset ${i.level === l.value ? l.cls : "bg-white text-ink-mute ring-zinc-200"}`}>
+                            {l.label}
+                          </button>
+                        </form>
+                      ))}
+                    </div>
+                  )}
+                  {tab !== "buy" && i.countable && (
                     <div className="flex shrink-0 items-center gap-1">
                       <form action={adjustQuantity.bind(null, i.id)}>
                         <input type="hidden" name="delta" value="-1" />
@@ -108,7 +131,7 @@ export default async function InventoryPage({
 
                 {tab === "low" && !i.toBuyQuantity && (
                   <form action={setToBuy.bind(null, i.id)} className="mt-2 flex items-center gap-2">
-                    <input name="toBuyQuantity" inputMode="decimal" defaultValue={fmtQty(Math.max(1, i.minQuantity * 2 - i.quantity))} className="input w-24" aria-label="Сколько купить" />
+                    <input name="toBuyQuantity" inputMode="decimal" defaultValue={i.countable ? fmtQty(Math.max(1, i.minQuantity * 2 - i.quantity)) : "1"} className="input w-24" aria-label="Сколько купить" />
                     <span className="text-sm text-ink-mute">{i.unit}</span>
                     <button className="btn-secondary btn-sm h-11">Добавить в закупку</button>
                   </form>

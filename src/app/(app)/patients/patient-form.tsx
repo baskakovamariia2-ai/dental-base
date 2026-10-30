@@ -7,10 +7,12 @@ export function PatientForm({
   action,
   patient,
   submitLabel,
+  priceLists,
 }: {
   action: (fd: FormData) => Promise<void>;
   patient?: Patient;
   submitLabel: string;
+  priceLists: { id: string; name: string; isDefault: boolean }[];
 }) {
   return (
     <form action={action} className="space-y-4">
@@ -19,6 +21,9 @@ export function PatientForm({
         <Field label="Фамилия *"><input name="lastName" required defaultValue={patient?.lastName} className="input" autoComplete="off" /></Field>
         <Field label="Отчество"><input name="middleName" defaultValue={patient?.middleName ?? ""} className="input" autoComplete="off" /></Field>
         <Field label="Телефон"><input name="phone" type="tel" inputMode="tel" defaultValue={patient?.phone ?? ""} placeholder="+7" className="input" /></Field>
+        <Field label="Telegram (если не привязан к номеру)">
+          <input name="telegram" defaultValue={patient?.telegram ?? ""} placeholder="@username" autoCapitalize="none" autoCorrect="off" className="input" />
+        </Field>
         <Field label="Дата рождения"><input name="birthDate" type="date" defaultValue={patient?.birthDate ? toISODate(patient.birthDate) : ""} className="input" /></Field>
         <Field label="Дата первого визита">
           <input name="firstVisitDate" type="date" defaultValue={toISODate(patient?.firstVisitDate ?? new Date())} className="input" />
@@ -28,6 +33,12 @@ export function PatientForm({
         <Field label="Откуда узнал о нас? *"><Select name="source" options={PATIENT_SOURCE} defaultValue={patient?.source ?? "INSTAGRAM"} /></Field>
         <Field label="Уточнение (кто порекомендовал и т.п.)"><input name="sourceComment" defaultValue={patient?.sourceComment ?? ""} className="input" /></Field>
         <Field label="Статус"><Select name="status" options={PATIENT_STATUS} defaultValue={patient?.status ?? "NEW"} /></Field>
+        <Field label="Прайс, который отправили">
+          <select name="priceListId" defaultValue={patient?.priceListId ?? priceLists.find((l) => l.isDefault)?.id ?? ""} className="input">
+            <option value="">По умолчанию</option>
+            {priceLists.map((l) => <option key={l.id} value={l.id}>{l.name}{l.isDefault ? " · текущий" : ""}</option>)}
+          </select>
+        </Field>
       </div>
       <div className="card card-pad">
         <Field label="Общие заметки"><textarea name="notes" rows={4} defaultValue={patient?.notes ?? ""} className="input" /></Field>

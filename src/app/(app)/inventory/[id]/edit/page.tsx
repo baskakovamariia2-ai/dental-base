@@ -21,7 +21,7 @@ export default async function EditItemPage({ params, searchParams }: { params: P
       <ErrorNote show={!!error}>Укажите название</ErrorNote>
       <ItemForm action={updateItem.bind(null, id)} item={item} suppliers={suppliers} submitLabel="Сохранить" />
       <form action={archiveItem.bind(null, id)} className="mt-8">
-        <ConfirmButton message="Убрать товар со склада? История закупок сохранится.">Убрать со склада</ConfirmButton>
+        <ConfirmButton message="Убрать из инвентаря? История закупок сохранится.">Убрать из инвентаря</ConfirmButton>
       </form>
     </div>
   );

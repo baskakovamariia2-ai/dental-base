@@ -70,3 +70,22 @@ export function findOpt<T extends string, O extends { value: T }>(list: O[], v: 
 }
 
 export const values = <T extends string>(list: { value: T }[]) => list.map((o) => o.value);
+
+export const STOCK_LEVEL: { value: "PLENTY" | "ENOUGH" | "LOW" | "OUT"; label: string; cls: string }[] = [
+  { value: "PLENTY", label: "Много", cls: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
+  { value: "ENOUGH", label: "Есть", cls: "bg-sky-50 text-sky-700 ring-sky-200" },
+  { value: "LOW", label: "Мало", cls: "bg-amber-50 text-amber-700 ring-amber-200" },
+  { value: "OUT", label: "Нет", cls: "bg-rose-50 text-rose-700 ring-rose-200" },
+];
+
+export const ROLE_LABEL: Record<string, string> = { OWNER: "Администратор", DOCTOR: "Врач", ASSISTANT: "Ассистент" };
+
+export const FILE_CATEGORY: { value: "CT" | "XRAY" | "PHOTO" | "DOCUMENT" | "OTHER"; label: string }[] = [
+  { value: "PHOTO", label: "Фото" },
+  { value: "XRAY", label: "Рентген" },
+  { value: "CT", label: "КТ" },
+  { value: "DOCUMENT", label: "Документы" },
+  { value: "OTHER", label: "Другое" },
+];
+
+export const PHOTO_TAGS = ["До лечения", "После лечения", "Отдельный зуб", "Другое"];
