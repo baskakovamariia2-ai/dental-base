@@ -1,0 +1,9 @@
+{
+  "name": "Dental Base",
+  "short_name": "Dental Base",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f6f6f4",
+  "theme_color": "#f6f6f4",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

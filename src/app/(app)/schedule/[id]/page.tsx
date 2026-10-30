@@ -1,0 +1,60 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { prisma } from "@/lib/db";
+import { requireUser } from "@/lib/auth";
+import { fullName, phoneHref, whatsappHref } from "@/lib/format";
+import { deleteAppointment, toggleReminder, updateAppointment } from "@/actions/appointments";
+import { ConfirmButton } from "@/components/auto-submit";
+import { ErrorNote, PageHeader } from "@/components/ui";
+import { AppointmentFields } from "../appointment-form";
+
+export default async function EditAppointmentPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ error?: string }>;
+}) {
+  const user = await requireUser();
+  const { id } = await params;
+  const { error } = await searchParams;
+  const [ap, doctors] = await Promise.all([
+    prisma.appointment.findUnique({ where: { id }, include: { patient: true } }),
+    prisma.user.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
+  ]);
+  if (!ap) notFound();
+
+  return (
+    <div>
+      <PageHeader title="Запись" subtitle={<Link href={`/patients/${ap.patientId}`} className="text-accent">{fullName(ap.patient)}</Link>} back="/schedule" />
+      <ErrorNote show={!!error}>Укажите дату, время и процедуру</ErrorNote>
+
+      <div className="card card-pad mb-4">
+        <div className="section-title">Напоминание</div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={`badge ${ap.reminderSent ? "bg-emerald-50 text-emerald-700 ring-emerald-200" : "bg-zinc-100 text-zinc-600 ring-zinc-200"}`}>
+            {ap.reminderSent ? "Напоминание отправлено" : "Напоминание не отправлено"}
+          </span>
+          {ap.patient.phone && (
+            <>
+              <a href={whatsappHref(ap.patient.phone)} target="_blank" rel="noopener noreferrer" className="btn-secondary btn-sm">Написать в WhatsApp</a>
+              <a href={phoneHref(ap.patient.phone)} className="btn-secondary btn-sm">Позвонить</a>
+            </>
+          )}
+          <form action={toggleReminder.bind(null, ap.id)}>
+            <input type="hidden" name="returnTo" value={`/schedule/${ap.id}`} />
+            <button className="btn-primary btn-sm">{ap.reminderSent ? "Снять отметку" : "Отметить: напомнили"}</button>
+          </form>
+        </div>
+      </div>
+
+      <form action={updateAppointment.bind(null, ap.id)} className="space-y-4">
+        <AppointmentFields ap={ap} doctors={doctors} defaultDoctorId={user.id} defaultStart={ap.startsAt} />
+        <button className="btn-primary w-full sm:w-auto">Сохранить</button>
+      </form>
+      <form action={deleteAppointment.bind(null, ap.id)} className="mt-8">
+        <ConfirmButton message="Удалить запись из расписания?">Удалить запись</ConfirmButton>
+      </form>
+    </div>
+  );
+}

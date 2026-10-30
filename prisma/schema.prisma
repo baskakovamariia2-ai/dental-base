@@ -1,0 +1,327 @@
+// Dental Base — схема базы данных
+// Деньги храним в целых рублях (Int). Даты — timestamptz.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ───────────── Сотрудники и доступ ─────────────
+
+enum Role {
+  OWNER
+  DOCTOR
+  ASSISTANT
+}
+
+model User {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  name         String
+  passwordHash String
+  role         Role          @default(DOCTOR)
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  sessions     Session[]
+  appointments Appointment[]
+  visits       Visit[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique // в БД только SHA-256 от токена
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  userAgent String?
+
+  @@index([userId])
+}
+
+// ───────────── Пациент — центральная сущность ─────────────
+
+enum PatientStatus {
+  NEW
+  IN_TREATMENT
+  OBSERVATION
+  COMPLETED
+}
+
+enum PatientSource {
+  INSTAGRAM
+  REFERRAL
+  YANDEX
+  TWOGIS
+  FRIENDS
+  OTHER
+}
+
+model Patient {
+  id             String         @id @default(cuid())
+  firstName      String
+  lastName       String
+  middleName     String?
+  phone          String?
+  birthDate      DateTime?
+  firstVisitDate DateTime?
+  source         PatientSource  @default(OTHER)
+  sourceComment  String?
+  status         PatientStatus  @default(NEW)
+  notes          String?
+  isDemo         Boolean        @default(false)
+  archivedAt     DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  appointments   Appointment[]
+  visits         Visit[]
+  teeth          Tooth[]
+  treatmentItems TreatmentItem[]
+  prices         PatientPrice[]
+  files          PatientFile[]
+
+  @@index([lastName, firstName])
+  @@index([phone])
+  @@index([archivedAt])
+}
+
+// ───────────── Расписание ─────────────
+
+enum AppointmentStatus {
+  SCHEDULED
+  CONFIRMED
+  ARRIVED
+  IN_PROGRESS
+  DONE
+  CANCELLED
+  NO_SHOW
+}
+
+model Appointment {
+  id           String            @id @default(cuid())
+  patientId    String
+  patient      Patient           @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctorId     String?
+  doctor       User?             @relation(fields: [doctorId], references: [id], onDelete: SetNull)
+  startsAt     DateTime
+  durationMin  Int               @default(60)
+  procedure    String
+  status       AppointmentStatus @default(SCHEDULED)
+  reminderSent Boolean           @default(false)
+  comment      String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@index([startsAt])
+  @@index([patientId])
+}
+
+// ───────────── История приёмов ─────────────
+
+model Visit {
+  id              String   @id @default(cuid())
+  patientId       String
+  patient         Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctorId        String?
+  doctor          User?    @relation(fields: [doctorId], references: [id], onDelete: SetNull)
+  date            DateTime
+  reason          String?
+  workDone        String?
+  teeth           String? // например "36, 37"
+  diagnosis       String?
+  materials       String?
+  recommendations String?
+  cost            Int      @default(0)
+  comment         String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([patientId, date])
+}
+
+// ───────────── Зубная схема (FDI) ─────────────
+
+enum ToothStatus {
+  HEALTHY
+  CARIES
+  PLANNED
+  IN_TREATMENT
+  TREATED
+  FILLING
+  CROWN
+  IMPLANT
+  EXTRACTED
+  OBSERVATION
+}
+
+enum TreatmentStatus {
+  PLANNED
+  IN_PROGRESS
+  DONE
+  CANCELLED
+}
+
+model Tooth {
+  id              String           @id @default(cuid())
+  patientId       String
+  patient         Patient          @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  number          Int // 11–18, 21–28, 31–38, 41–48
+  status          ToothStatus      @default(HEALTHY)
+  diagnosis       String?
+  problem         String?
+  treatment       String?
+  notes           String?
+  price           Int?
+  treatmentStatus TreatmentStatus?
+  updatedAt       DateTime         @updatedAt
+
+  @@unique([patientId, number])
+}
+
+// ───────────── План лечения ─────────────
+
+model TreatmentItem {
+  id          String          @id @default(cuid())
+  patientId   String
+  patient     Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  toothNumber Int?
+  diagnosis   String?
+  treatment   String
+  price       Int // цена, назначенная пациенту (не меняется при изменении прайса)
+  paid        Int             @default(0)
+  status      TreatmentStatus @default(PLANNED)
+  sortOrder   Int             @default(0)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([patientId])
+}
+
+// ───────────── Цены ─────────────
+
+model Service {
+  id        String         @id @default(cuid())
+  name      String
+  price     Int
+  category  String?
+  comment   String?
+  isActive  Boolean        @default(true)
+  createdAt DateTime       @default(now())
+  patientPrices PatientPrice[]
+}
+
+model PatientPrice {
+  id        String   @id @default(cuid())
+  patientId String
+  patient   Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  serviceId String?
+  service   Service? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  name      String
+  price     Int
+  createdAt DateTime @default(now())
+
+  @@index([patientId])
+}
+
+// ───────────── Файлы (этап 2): в БД только метаданные ─────────────
+
+enum FileCategory {
+  CT
+  XRAY
+  PHOTO
+  DOCUMENT
+  OTHER
+}
+
+model PatientFile {
+  id          String       @id @default(cuid())
+  patientId   String
+  patient     Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  category    FileCategory @default(OTHER)
+  title       String
+  date        DateTime     @default(now())
+  comment     String?
+  photoTag    String? // до / после / зуб N / другое
+  storageKey  String // ключ объекта в S3-хранилище
+  mimeType    String?
+  sizeBytes   BigInt?
+  createdAt   DateTime     @default(now())
+
+  @@index([patientId])
+}
+
+// ───────────── Задачи ─────────────
+
+model Task {
+  id        String    @id @default(cuid())
+  title     String
+  dueDate   DateTime?
+  done      Boolean   @default(false)
+  patientId String?
+  createdAt DateTime  @default(now())
+}
+
+// ───────────── Склад (отдельно от пациентов) ─────────────
+
+enum InventoryCategory {
+  INSTRUMENTS
+  CONSUMABLES
+  COMPOSITES
+  ANESTHESIA
+  PROTECTION
+  MATERIALS
+  OTHER
+}
+
+model Supplier {
+  id        String          @id @default(cuid())
+  name      String          @unique
+  phone     String?
+  url       String?
+  comment   String?
+  items     InventoryItem[]
+  purchases Purchase[]
+}
+
+model InventoryItem {
+  id                String            @id @default(cuid())
+  name              String
+  category          InventoryCategory @default(OTHER)
+  quantity          Float             @default(0)
+  unit              String            @default("шт.")
+  minQuantity       Float             @default(0)
+  lastPurchasePrice Int?
+  currentPrice      Int?
+  lastPurchaseDate  DateTime?
+  supplierId        String?
+  supplier          Supplier?         @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  url               String?
+  comment           String?
+  toBuyQuantity     Float? // если задано — товар в списке «Закупить»
+  archivedAt        DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  purchases         Purchase[]
+
+  @@index([category])
+}
+
+model Purchase {
+  id         String        @id @default(cuid())
+  itemId     String
+  item       InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  date       DateTime
+  quantity   Float
+  price      Int // цена за единицу
+  supplierId String?
+  supplier   Supplier?     @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  comment    String?
+  createdAt  DateTime      @default(now())
+
+  @@index([itemId, date])
+}
