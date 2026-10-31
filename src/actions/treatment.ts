@@ -19,18 +19,13 @@ export async function addTreatmentItem(patientId: string, formData: FormData) {
   const tooth = raw !== null && isValidTooth(raw) ? raw : null;
   const treatment = str(formData, "treatment", 300);
   if (!treatment) return;
-  let diagnosis = optStr(formData, "diagnosis", 300);
-  if (!diagnosis && tooth !== null) {
-    const t = await prisma.tooth.findUnique({ where: { patientId_number: { patientId, number: tooth } } });
-    diagnosis = t?.diagnosis ?? null;
-  }
   const maxOrder = await prisma.treatmentItem.aggregate({ where: { patientId }, _max: { sortOrder: true } });
   await prisma.treatmentItem.create({
     data: {
       patientId,
       toothNumber: tooth,
-      diagnosis,
       treatment,
+      note: optStr(formData, "note", 1000),
       price: Math.max(0, int(formData, "price")),
       paid: Math.max(0, int(formData, "paid")),
       status: oneOf(formData, "status", values(TREATMENT_STATUS), "PLANNED"),
@@ -54,7 +49,7 @@ export async function updateTreatmentItem(id: string, formData: FormData) {
       paid,
       price: Math.max(0, int(formData, "price", item.price)),
       treatment: str(formData, "treatment", 300) || item.treatment,
-      diagnosis: formData.has("diagnosis") ? optStr(formData, "diagnosis", 300) : item.diagnosis,
+      note: formData.has("note") ? optStr(formData, "note", 1000) : item.note,
     },
   });
   await syncToothWithPlan(item.patientId, item.toothNumber);

@@ -2,17 +2,70 @@
 
 export type ParsedPrice = { name: string; price: number };
 
-/** «Лечение кариеса — 7 000 ₽» → { name, price }. Строки без цены пропускаются. */
+const PRICE = String.raw`(\d{1,3}(?:[ \u00a0.]\d{3})+|\d+)`;
+const toNum = (x: string) => Number(x.replace(/[ \u00a0.]/g, ""));
+
+/** Ищет цену в строке. Возвращает цену и текст без неё. */
+function extractPrice(line: string): { price: number; rest: string } | null {
+  // 1) число с валютой где угодно: «7 000 ₽», «7000р», «от 3 000 руб.»
+  let m = new RegExp(String.raw`(?:от\s*)?` + PRICE + String.raw`\s*(?:[-–—]\s*` + PRICE + String.raw`\s*)?(?:₽|р\.?(?![а-я])|руб\S*|rub)`, "i").exec(line);
+  // 2) число в конце строки (диапазон «3 000 – 8 000» → берём первое)
+  if (!m) m = new RegExp(String.raw`(?:от\s*)?` + PRICE + String.raw`(?:\s*[-–—]\s*` + PRICE + String.raw`)?\s*\.?\s*$`, "i").exec(line);
+  if (m) {
+    const price = toNum(m[1]);
+    const before = line.slice(0, m.index);
+    // «1 канал 12000»: число в конце, но «1» в начале — это не цена
+    if (price > 0) return { price, rest: (before + " " + line.slice(m.index + m[0].length)).trim() };
+  }
+  // 3) цена в начале: «7000 — Реставрация»
+  m = new RegExp("^" + PRICE + String.raw`\s*(?:₽|р\.?|руб\S*)?\s*[-–—:]\s*(.+)$`, "i").exec(line);
+  if (m && toNum(m[1]) >= 100) return { price: toNum(m[1]), rest: m[3] ?? m[2] };
+  return null;
+}
+
+function cleanName(s: string) {
+  return s
+    .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, "")
+    .replace(/[\s:–—\-=.…|]+$/, "")
+    .replace(/^[\s:–—\-=.…|]+/, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+/**
+ * Разбор прайса. Понимает:
+ *  «Реставрация — 7 000 ₽», «7000 — Реставрация», цену на следующей строке,
+ *  подпункты под заголовком («Лечение пульпита» → «1 канал 12 000»).
+ */
 export function parsePriceList(text: string): ParsedPrice[] {
   const out: ParsedPrice[] = [];
-  for (const raw of text.split(/\n/)) {
-    const line = raw.replace(/^[\s•*\-–—\d.)]+(?=\D)/, "").trim();
-    // последнее число в строке (с пробелами-разделителями тысяч)
-    const m = /(\d[\d\s]*\d|\d)(?:[.,]\d+)?\s*(?:₽|р\.?|руб\.?|rub)?\.?\s*$/i.exec(line);
-    if (!m) continue;
-    const price = Number(m[1].replace(/\s/g, ""));
-    const name = line.slice(0, m.index).replace(/[\s:–—\-=.…]+$/, "").replace(/\bот\s*$/i, "").trim();
-    if (name && price > 0 && price < 10_000_000) out.push({ name, price });
+  const lines = text.split(/\n/).map((l) => l.replace(/^[\s•*·\-–—]+/, "").replace(/^\d+[.)]\s+/, "").trim());
+  let header: string | null = null;
+  let pending: string | null = null; // строка без цены — возможно, цена на следующей строке
+  for (const line of lines) {
+    if (!line) {
+      pending = null;
+      continue;
+    }
+    // строка — только цена: относится к предыдущей
+    const onlyPrice = new RegExp("^(?:от\\s*)?" + PRICE + String.raw`\s*(?:[-–—]\s*\d[\d \u00a0.]*)?\s*(?:₽|р\.?|руб\S*)?\.?$`, "i").exec(line);
+    if (onlyPrice && pending) {
+      const isSub = /^\d+\s*\S/.test(pending) && header;
+      out.push({ name: cleanName(isSub ? `${header} — ${pending}` : pending), price: toNum(onlyPrice[1]) });
+      pending = null;
+      continue;
+    }
+    const found = extractPrice(line);
+    if (!found || /20\d\d\s*(г|год)/i.test(line) && !/₽|руб|р\./i.test(line)) {
+      // без цены: заголовок группы или название, у которого цена ниже
+      if (!/^\d+\s*(канал|зуб)/i.test(line)) header = cleanName(line.replace(/\(.*?\)/g, (x) => x));
+      pending = line;
+      continue;
+    }
+    let name = cleanName(found.rest);
+    if (/^\d+\s*\S/.test(name) && header) name = `${header} — ${name}`;
+    if (name && found.price < 10_000_000) out.push({ name, price: found.price });
+    pending = null;
   }
   return out;
 }

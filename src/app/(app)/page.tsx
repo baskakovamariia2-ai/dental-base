@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
+import { getReminderTemplate } from "@/lib/reminder";
 import { addDays, sameDay, startOfDay, startOfMonth } from "@/lib/dates";
 import { fmtDate, fmtDateLong } from "@/lib/format";
 import { addTask, toggleTask } from "@/actions/tasks";
@@ -20,7 +21,7 @@ export default async function Dashboard() {
   });
   const day = nextAp ? startOfDay(nextAp.startsAt) : today;
 
-  const [dayAps, tasks, total, newThisMonth, active] = await Promise.all([
+  const [dayAps, tasks, total, newThisMonth, active, tpl] = await Promise.all([
     prisma.appointment.findMany({
       where: { startsAt: { gte: day, lt: addDays(day, 1) } },
       include: { patient: true, doctor: true },
@@ -30,6 +31,7 @@ export default async function Dashboard() {
     prisma.patient.count({ where: { archivedAt: null } }),
     prisma.patient.count({ where: { archivedAt: null, createdAt: { gte: startOfMonth(now) } } }),
     prisma.patient.count({ where: { archivedAt: null, status: "IN_TREATMENT" } }),
+    getReminderTemplate(),
   ]);
 
   const quick = [
@@ -68,7 +70,7 @@ export default async function Dashboard() {
           <Empty>Предстоящих записей нет. <Link href="/schedule/new" className="text-accent">Записать пациента</Link></Empty>
         ) : (
           <div className="card divide-y divide-zinc-100">
-            {dayAps.map((a) => <AppointmentRow key={a.id} a={a} returnTo="/" />)}
+            {dayAps.map((a) => <AppointmentRow key={a.id} a={a} returnTo="/" reminderTemplate={tpl} />)}
           </div>
         )}
       </section>

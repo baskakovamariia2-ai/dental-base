@@ -197,6 +197,7 @@ model TreatmentItem {
   treatment   String
   price       Int // цена, назначенная пациенту (не меняется при изменении прайса)
   paid        Int             @default(0)
+  note        String? // заметка (по желанию)
   status      TreatmentStatus @default(PLANNED)
   sortOrder   Int             @default(0)
   createdAt   DateTime        @default(now())
@@ -361,4 +362,12 @@ model Purchase {
   createdAt  DateTime      @default(now())
 
   @@index([itemId, date])
+}
+
+// ───────────── Настройки (шаблон напоминания и т.п.) ─────────────
+
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
 }

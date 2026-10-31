@@ -64,3 +64,10 @@ export async function deleteAppointment(id: string) {
   revalidatePath("/", "layout");
   redirect(`/schedule?view=day&date=${toISODate(a.startsAt)}`);
 }
+
+/** Вызывается кнопкой «Напомнить в Telegram» */
+export async function markReminderSent(id: string) {
+  await requireUser();
+  await prisma.appointment.update({ where: { id }, data: { reminderSent: true } });
+  revalidatePath("/", "layout");
+}

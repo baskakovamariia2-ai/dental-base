@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
+import { getReminderTemplate } from "@/lib/reminder";
 import { addDays, addMonths, parseISODate, sameDay, startOfDay, startOfMonth, startOfWeek, toISODate } from "@/lib/dates";
 import { fmtDateLong, fmtTime, fullName } from "@/lib/format";
 import { APPOINTMENT_STATUS, findOpt } from "@/lib/labels";
@@ -41,6 +42,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
     orderBy: { startsAt: "asc" },
   });
 
+  const tpl = await getReminderTemplate();
   const link = (v: View, d: Date) => (v === "upcoming" ? "/schedule" : `/schedule?view=${v}&date=${toISODate(d)}`);
   const returnTo = link(view, date);
 
@@ -83,7 +85,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
                   <Link href={link("day", dd)} className="mb-2 block px-1 text-sm font-semibold capitalize text-ink-soft">
                     {sameDay(dd, today) ? "Сегодня, " : ""}{fmtDateLong(dd)} · {list.length}
                   </Link>
-                  <div className="card divide-y divide-zinc-100">{list.map((a) => <AppointmentRow key={a.id} a={a} returnTo="/schedule" />)}</div>
+                  <div className="card divide-y divide-zinc-100">{list.map((a) => <AppointmentRow key={a.id} a={a} returnTo="/schedule" reminderTemplate={tpl} />)}</div>
                 </section>
               );
             })}
@@ -94,7 +96,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
         (aps.length === 0 ? (
           <Empty>Записей нет. <Link className="text-accent" href={`/schedule/new?date=${toISODate(date)}`}>Добавить запись</Link></Empty>
         ) : (
-          <div className="card divide-y divide-zinc-100">{aps.map((a) => <AppointmentRow key={a.id} a={a} returnTo={returnTo} />)}</div>
+          <div className="card divide-y divide-zinc-100">{aps.map((a) => <AppointmentRow key={a.id} a={a} returnTo={returnTo} reminderTemplate={tpl} />)}</div>
         ))}
 
       {view === "week" && (

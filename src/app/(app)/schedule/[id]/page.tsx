@@ -2,6 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
+import { getReminderTemplate, reminderText } from "@/lib/reminder";
+import { ReminderButton } from "@/components/reminder-button";
 import { getDoctors } from "@/lib/doctors";
 import { fullName, phoneHref, telegramHref } from "@/lib/format";
 import { deleteAppointment, toggleReminder, updateAppointment } from "@/actions/appointments";
@@ -24,6 +26,7 @@ export default async function EditAppointmentPage({
     getDoctors(),
   ]);
   if (!ap) notFound();
+  const tpl = await getReminderTemplate();
 
   return (
     <div>
@@ -36,9 +39,7 @@ export default async function EditAppointmentPage({
           <span className={`badge ${ap.reminderSent ? "bg-emerald-50 text-emerald-700 ring-emerald-200" : "bg-zinc-100 text-zinc-600 ring-zinc-200"}`}>
             {ap.reminderSent ? "Напоминание отправлено" : "Напоминание не отправлено"}
           </span>
-          {telegramHref(ap.patient) && (
-            <a href={telegramHref(ap.patient)!} target="_blank" rel="noopener noreferrer" className="btn-secondary btn-sm">Написать в Telegram</a>
-          )}
+          <ReminderButton appointmentId={ap.id} text={reminderText(tpl, ap.startsAt)} telegram={telegramHref(ap.patient)} sent={ap.reminderSent} className="btn-primary btn-sm" />
           {ap.patient.phone && <a href={phoneHref(ap.patient.phone)} className="btn-secondary btn-sm">Позвонить</a>}
           <form action={toggleReminder.bind(null, ap.id)}>
             <input type="hidden" name="returnTo" value={`/schedule/${ap.id}`} />

@@ -3,6 +3,8 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { logout, changePassword } from "@/actions/auth";
 import { addUser, clearDemo, seedDemo, toggleUserActive } from "@/actions/admin";
+import { saveReminderTemplate } from "@/actions/settings";
+import { getReminderTemplate } from "@/lib/reminder";
 import { ConfirmButton } from "@/components/auto-submit";
 import { Field, PageHeader } from "@/components/ui";
 import { IconChart, IconChevron, IconLogout, IconSearch, IconTag, IconUsers } from "@/components/icons";
@@ -19,10 +21,11 @@ const USERMSG: Record<string, [string, string]> = {
   invalid: ["Заполните имя, email и пароль от 10 символов", "bg-rose-50 text-rose-700"],
 };
 
-export default async function MorePage({ searchParams }: { searchParams: Promise<{ pw?: string; user?: string; welcome?: string }> }) {
+export default async function MorePage({ searchParams }: { searchParams: Promise<{ pw?: string; user?: string; welcome?: string; tpl?: string }> }) {
   const me = await requireUser();
   const sp = await searchParams;
   const isOwner = me.role === "OWNER";
+  const tpl = await getReminderTemplate();
   const [users, demoCount] = await Promise.all([
     isOwner ? prisma.user.findMany({ orderBy: { createdAt: "asc" } }) : Promise.resolve([]),
     prisma.patient.count({ where: { isDemo: true } }),
@@ -93,6 +96,19 @@ export default async function MorePage({ searchParams }: { searchParams: Promise
           </details>
         </section>
       )}
+
+      <section>
+        <h2 className="section-title">Напоминание в Telegram</h2>
+        {sp.tpl && <p className="mb-3 rounded-xl bg-emerald-50 px-3 py-2.5 text-sm text-emerald-700">Шаблон сохранён</p>}
+        <form action={saveReminderTemplate} className="card card-pad space-y-3">
+          <p className="text-sm text-ink-soft">Этот текст копируется кнопкой «Напомнить в Telegram». Вместо <b>{"{дата}"}</b> подставятся дата и время ближайшей записи, например «5 ноября (среда) в 14:00».</p>
+          <textarea name="template" rows={14} defaultValue={tpl} className="input text-[15px]" />
+          <div className="flex flex-wrap gap-2">
+            <button className="btn-primary">Сохранить</button>
+            <button name="reset" value="1" className="btn-ghost">Вернуть исходный</button>
+          </div>
+        </form>
+      </section>
 
       <section>
         <h2 className="section-title">Смена пароля</h2>

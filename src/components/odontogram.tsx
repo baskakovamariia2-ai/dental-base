@@ -4,126 +4,78 @@ import { useState } from "react";
 import type { ToothStatus, TreatmentStatus } from "@prisma/client";
 import { saveTooth } from "@/actions/teeth";
 import { addTreatmentItem, deleteTreatmentItem, updateTreatmentItem } from "@/actions/treatment";
-import { TOOTH_STATUS, TREATMENT_STATUS } from "@/lib/labels";
-import { LOWER, UPPER } from "@/lib/teeth";
-import { ToothShape, toothStatusOpt } from "./tooth-shape";
+import { TREATMENT_STATUS } from "@/lib/labels";
+import { CATEGORY_STYLE, LOWER, UPPER, toothCategory, type ToothCategory } from "@/lib/teeth";
+import { CategoryLegend, ToothCellView } from "./tooth-shape";
+import { TreatmentFields } from "./price-picker";
 
-export type ToothData = {
-  number: number;
-  status: ToothStatus;
-  diagnosis: string | null;
-  problem: string | null;
-  notes: string | null;
-};
+export type ToothData = { number: number; status: ToothStatus; notes: string | null };
+export type PlanItemData = { id: string; toothNumber: number | null; treatment: string; price: number; status: TreatmentStatus };
+export type PriceOption = { name: string; price: number };
 
-export type PlanItemData = {
-  id: string;
-  toothNumber: number | null;
-  treatment: string;
-  price: number;
-  status: TreatmentStatus;
-};
+const OPEN = (s: TreatmentStatus) => s === "PLANNED" || s === "IN_PROGRESS";
 
-export type PriceOption = { name: string; price: number; group: string };
-
-export function Odontogram({
-  patientId,
-  teeth,
-  plan,
-  prices,
-}: {
-  patientId: string;
-  teeth: ToothData[];
-  plan: PlanItemData[];
-  prices: PriceOption[];
-}) {
+export function Odontogram({ patientId, teeth, plan, prices }: { patientId: string; teeth: ToothData[]; plan: PlanItemData[]; prices: PriceOption[] }) {
   const [open, setOpen] = useState<number | null>(null);
   const map = new Map(teeth.map((t) => [t.number, t]));
-  const get = (n: number): ToothData => map.get(n) ?? { number: n, status: "HEALTHY", diagnosis: null, problem: null, notes: null };
+  const get = (n: number): ToothData => map.get(n) ?? { number: n, status: "HEALTHY", notes: null };
   const planFor = (n: number) => plan.filter((p) => p.toothNumber === n && p.status !== "CANCELLED");
+  const cat = (n: number) => toothCategory(get(n).status, planFor(n).some((p) => OPEN(p.status)));
 
-  const Jaw = ({ list, upper }: { list: number[]; upper: boolean }) => (
-    <div className="grid grid-cols-8 gap-y-2 sm:grid-cols-[repeat(16,minmax(0,1fr))]">
-      {list.map((n, i) => {
-        const t = get(n);
-        const hasPlan = planFor(n).some((p) => p.status !== "DONE");
-        return (
-          <button
-            key={n}
-            type="button"
-            onClick={() => setOpen(n)}
-            className={`relative flex flex-col items-center gap-0.5 rounded-xl py-1.5 transition hover:bg-zinc-50 active:scale-95 ${
-              open === n ? "bg-accent-soft" : ""
-            } ${i === 7 ? "sm:mr-1.5 sm:border-r sm:border-dashed sm:border-zinc-200" : ""}`}
-            aria-label={`Зуб ${n}: ${toothStatusOpt(t.status).label}`}
-          >
-            {upper && <span className="text-[11px] font-medium tabular-nums text-ink-soft">{n}</span>}
-            <ToothShape status={t.status} upper={upper} />
-            {!upper && <span className="text-[11px] font-medium tabular-nums text-ink-soft">{n}</span>}
-            {hasPlan && <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-orange-500" />}
-          </button>
-        );
-      })}
+  const Jaw = ({ list }: { list: number[] }) => (
+    <div className="grid grid-cols-8 gap-1 sm:grid-cols-[repeat(16,minmax(0,1fr))]">
+      {list.map((n, i) => (
+        <button
+          key={n}
+          type="button"
+          onClick={() => setOpen(n)}
+          className={`rounded-xl transition active:scale-95 ${open === n ? "ring-2 ring-ink" : ""} ${i === 7 ? "sm:mr-2" : ""}`}
+          aria-label={`Зуб ${n}`}
+        >
+          <ToothCellView number={n} category={cat(n)} />
+        </button>
+      ))}
     </div>
   );
 
   const current = open !== null ? get(open) : null;
-
   return (
     <div>
-      <div className="card card-pad space-y-3">
-        <div className="text-center text-[11px] font-medium uppercase tracking-wide text-ink-mute">Верхняя челюсть</div>
-        <Jaw list={UPPER} upper />
-        <div className="border-t border-dashed border-zinc-200" />
-        <Jaw list={LOWER} upper={false} />
-        <div className="text-center text-[11px] font-medium uppercase tracking-wide text-ink-mute">Нижняя челюсть</div>
+      <div className="card card-pad space-y-2">
+        <Jaw list={UPPER} />
+        <Jaw list={LOWER} />
+        <div className="pt-2"><CategoryLegend /></div>
       </div>
-
-      <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1.5 px-1">
-        {TOOTH_STATUS.map((o) => (
-          <span key={o.value} className="flex items-center gap-1.5 text-xs text-ink-soft">
-            <span className="h-3 w-3 rounded-full" style={{ background: o.fill, boxShadow: `inset 0 0 0 1.5px ${o.stroke}` }} />
-            {o.label}
-          </span>
-        ))}
-        <span className="flex items-center gap-1.5 text-xs text-ink-soft">
-          <span className="h-2 w-2 rounded-full bg-orange-500" /> есть в плане
-        </span>
-      </div>
-
       {current && (
-        <ToothSheet
-          key={current.number}
-          patientId={patientId}
-          tooth={current}
-          plan={planFor(current.number)}
-          prices={prices}
-          onClose={() => setOpen(null)}
-        />
+        <ToothSheet key={current.number} patientId={patientId} tooth={current} category={cat(current.number)} plan={planFor(current.number)} prices={prices} onClose={() => setOpen(null)} />
       )}
     </div>
   );
 }
 
+const CHOICES: { cat: ToothCategory; status: ToothStatus }[] = [
+  { cat: "healthy", status: "HEALTHY" },
+  { cat: "problem", status: "CARIES" },
+  { cat: "treated", status: "TREATED" },
+  { cat: "missing", status: "EXTRACTED" },
+];
+const CHOICE_LABEL: Record<ToothCategory, string> = { healthy: "Здоровый", problem: "Проблемный", treated: "Леченый", missing: "Отсутствует" };
+
 function ToothSheet({
-  patientId,
-  tooth,
-  plan,
-  prices,
-  onClose,
-}: {
-  patientId: string;
-  tooth: ToothData;
-  plan: PlanItemData[];
-  prices: PriceOption[];
-  onClose: () => void;
-}) {
-  const [status, setStatus] = useState<ToothStatus>(tooth.status);
-  const [treatment, setTreatment] = useState("");
-  const [price, setPrice] = useState("");
+  patientId, tooth, category, plan, prices, onClose,
+}: { patientId: string; tooth: ToothData; category: ToothCategory; plan: PlanItemData[]; prices: PriceOption[]; onClose: () => void }) {
   const [busy, setBusy] = useState(false);
+  const [formKey, setFormKey] = useState(0);
   const save = saveTooth.bind(null, patientId, tooth.number);
   const addItem = addTreatmentItem.bind(null, patientId);
+  const run = async (fn: () => Promise<void>) => {
+    setBusy(true);
+    try {
+      await fn();
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 sm:items-center" onClick={onClose}>
@@ -137,120 +89,73 @@ function ToothSheet({
           <button type="button" onClick={onClose} className="btn-ghost btn-sm">Закрыть</button>
         </div>
 
-        {/* Состояние зуба */}
-        <form
-          action={async (fd) => {
-            setBusy(true);
-            try {
-              await save(fd);
-            } finally {
-              setBusy(false);
-            }
-          }}
-          className="space-y-4"
-        >
-          <input type="hidden" name="status" value={status} />
-          <div>
-            <span className="label">Состояние</span>
-            <div className="flex flex-wrap gap-1.5">
-              {TOOTH_STATUS.map((o) => (
-                <button
-                  key={o.value}
-                  type="button"
-                  onClick={() => setStatus(o.value)}
-                  className={`flex min-h-[36px] items-center gap-1.5 rounded-full px-3 text-sm ring-1 ${
-                    status === o.value ? "bg-ink text-white ring-ink" : "bg-white text-ink-soft ring-zinc-200"
-                  }`}
+        {/* Лечение по плану */}
+        <div className="section-title">Лечение по плану</div>
+        {plan.length === 0 && <p className="mb-3 text-sm text-ink-mute">Пока ничего не запланировано</p>}
+        <div className="mb-3 space-y-2">
+          {plan.map((p) => (
+            <div key={p.id} className="flex items-center gap-2 rounded-xl bg-zinc-50 px-3 py-2">
+              <span className="min-w-0 flex-1 text-[15px]">
+                {p.treatment}
+                <span className="block text-xs text-ink-mute">{p.price ? `${p.price.toLocaleString("ru-RU")} ₽` : "цена не указана"}</span>
+              </span>
+              <form action={updateTreatmentItem.bind(null, p.id)}>
+                <select
+                  name="status"
+                  defaultValue={p.status}
+                  onChange={(e) => e.currentTarget.form?.requestSubmit()}
+                  className="rounded-lg border-0 bg-white py-1.5 pl-2 pr-7 text-sm ring-1 ring-zinc-200"
                 >
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: o.fill, boxShadow: `inset 0 0 0 1.5px ${o.stroke}` }} />
-                  {o.label}
-                </button>
-              ))}
+                  {TREATMENT_STATUS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </form>
+              <form action={deleteTreatmentItem.bind(null, p.id)}>
+                <button className="px-1 text-ink-mute hover:text-rose-600" aria-label="Удалить">✕</button>
+              </form>
             </div>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="block">
-              <span className="label">Диагноз</span>
-              <input name="diagnosis" defaultValue={tooth.diagnosis ?? ""} placeholder="Средний кариес" className="input" />
-            </label>
-            <label className="block">
-              <span className="label">Жалоба / проблема</span>
-              <input name="problem" defaultValue={tooth.problem ?? ""} className="input" />
-            </label>
-          </div>
-          <label className="block">
-            <span className="label">Заметки</span>
-            <textarea name="notes" rows={2} defaultValue={tooth.notes ?? ""} className="input" />
-          </label>
-          <button disabled={busy} className="btn-secondary w-full">{busy ? "Сохраняю…" : "Сохранить состояние"}</button>
+          ))}
+        </div>
+        <form
+          key={formKey}
+          action={(fd) => run(async () => {
+            await addItem(fd);
+            setFormKey((k) => k + 1);
+          })}
+          className="space-y-3 rounded-2xl border border-zinc-100 p-3"
+        >
+          <input type="hidden" name="toothNumber" value={tooth.number} />
+          <TreatmentFields prices={prices} compact />
+          <button disabled={busy} className="btn-primary w-full">+ Добавить в план</button>
         </form>
 
-        {/* Лечение по плану — одно место для лечения и цены */}
-        <div className="mt-6 border-t border-zinc-100 pt-5">
-          <div className="section-title">Лечение по плану</div>
-          {plan.length === 0 && <p className="mb-3 text-sm text-ink-mute">Для этого зуба лечение ещё не запланировано</p>}
-          <div className="mb-3 space-y-2">
-            {plan.map((p) => (
-              <div key={p.id} className="flex items-center gap-2 rounded-xl bg-zinc-50 px-3 py-2">
-                <span className="min-w-0 flex-1 text-[15px]">
-                  {p.treatment}
-                  <span className="block text-xs text-ink-mute">{p.price ? `${p.price.toLocaleString("ru-RU")} ₽` : "цена не указана"}</span>
-                </span>
-                <form action={updateTreatmentItem.bind(null, p.id)}>
-                  <select
-                    name="status"
-                    defaultValue={p.status}
-                    onChange={(e) => e.currentTarget.form?.requestSubmit()}
-                    className="rounded-lg border-0 bg-white py-1.5 pl-2 pr-7 text-sm ring-1 ring-zinc-200"
-                  >
-                    {TREATMENT_STATUS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
-                </form>
-                <form action={deleteTreatmentItem.bind(null, p.id)}>
-                  <button className="px-1 text-ink-mute hover:text-rose-600" aria-label="Удалить">✕</button>
-                </form>
-              </div>
+        {/* Состояние и заметки */}
+        <form action={(fd) => run(() => save(fd))} className="mt-6 space-y-3 border-t border-zinc-100 pt-5">
+          <div className="section-title">Состояние зуба</div>
+          <div className="grid grid-cols-2 gap-2">
+            {CHOICES.map((c) => (
+              <button
+                key={c.cat}
+                name="status"
+                value={c.cat === category && c.cat === "treated" ? tooth.status : c.status}
+                className={`flex min-h-[44px] items-center justify-center gap-2 rounded-xl text-sm font-medium ring-1 ${
+                  category === c.cat ? "ring-2 ring-ink" : "ring-zinc-200"
+                }`}
+                style={{ background: CATEGORY_STYLE[c.cat].bg === "transparent" ? "#fff" : CATEGORY_STYLE[c.cat].bg }}
+              >
+                {c.cat === "missing" ? <span className="font-bold text-[#E8384F]">✕</span> : (
+                  <span className="h-3 w-3 rounded-full" style={{ background: CATEGORY_STYLE[c.cat].fill, boxShadow: c.cat === "healthy" ? "inset 0 0 0 2px #18181b" : undefined }} />
+                )}
+                {CHOICE_LABEL[c.cat]}
+              </button>
             ))}
           </div>
-          <form
-            action={async (fd) => {
-              setBusy(true);
-              try {
-                await addItem(fd);
-                setTreatment("");
-                setPrice("");
-              } finally {
-                setBusy(false);
-              }
-            }}
-            className="space-y-3"
-          >
-            <input type="hidden" name="toothNumber" value={tooth.number} />
-            {prices.length > 0 && (
-              <select
-                className="input"
-                value=""
-                onChange={(e) => {
-                  const p = prices[Number(e.target.value)];
-                  if (p) {
-                    setTreatment(p.name);
-                    setPrice(String(p.price));
-                  }
-                }}
-              >
-                <option value="">Выбрать услугу из прайса…</option>
-                {prices.map((p, i) => (
-                  <option key={i} value={i}>{p.name} — {p.price.toLocaleString("ru-RU")} ₽</option>
-                ))}
-              </select>
-            )}
-            <div className="grid grid-cols-[1fr_120px] gap-2">
-              <input name="treatment" required value={treatment} onChange={(e) => setTreatment(e.target.value)} placeholder="Лечение" className="input" />
-              <input name="price" inputMode="numeric" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Цена" className="input" />
-            </div>
-            <button disabled={busy} className="btn-primary w-full">+ Добавить в план</button>
-          </form>
-        </div>
+          <label className="block">
+            <span className="label">Заметки (по желанию)</span>
+            <textarea name="notes" rows={2} defaultValue={tooth.notes ?? ""} className="input" />
+          </label>
+          <button disabled={busy} className="btn-secondary w-full">Сохранить заметку</button>
+          <p className="text-xs text-ink-mute">Нажмите на состояние — оно сохранится сразу. Если есть лечение в плане, зуб и так отмечен как проблемный.</p>
+        </form>
       </div>
     </div>
   );

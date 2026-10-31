@@ -63,7 +63,7 @@ export function DictationBox({ patientId }: { patientId: string }) {
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="font-medium">Надиктовать формулу</div>
-          <p className="text-sm text-ink-soft">Например: «36 37 кариес пломба, 26 пульпит, 48 удаление, 11 наблюдение». Цены подставятся из прайса пациента.</p>
+          <p className="text-sm text-ink-soft">Например: «36 37 кариес, 26 пульпит 3 канала, 46 периодонтит, 48 удаление, 11 коронка». Цены подставятся из прайса пациента.</p>
         </div>
         <button
           type="button"
@@ -92,7 +92,7 @@ export function DictationBox({ patientId }: { patientId: string }) {
       )}
       {items && (
         <div className="space-y-2">
-          {items.length === 0 && <p className="text-sm text-rose-600">Не нашла номеров зубов или диагнозов. Попробуйте: «36 пломба, 26 пульпит».</p>}
+          {items.length === 0 && <p className="text-sm text-rose-600">Не нашла номеров зубов или лечения. Попробуйте: «36 кариес, 26 пульпит 2 канала».</p>}
           {items.map((it, i) => (
             <label key={i} className={`flex items-center gap-3 rounded-xl px-3 py-2 ${it.on ? "bg-zinc-50" : "opacity-40"}`}>
               <input
@@ -103,8 +103,7 @@ export function DictationBox({ patientId }: { patientId: string }) {
               />
               <span className="w-8 font-semibold tabular-nums">{it.tooth ?? "—"}</span>
               <span className="min-w-0 flex-1 text-sm">
-                {[it.diagnosis, statusLabel(it.status)].filter(Boolean).join(" · ")}
-                {it.treatment && <span className="block font-medium">→ {it.treatment}</span>}
+                {it.treatment ? <span className="font-medium">{it.treatment}</span> : statusLabel(it.status)}
               </span>
             </label>
           ))}

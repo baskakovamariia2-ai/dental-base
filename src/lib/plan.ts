@@ -1,15 +1,6 @@
 import type { ToothStatus, TreatmentStatus } from "@prisma/client";
 import { prisma } from "./db";
-
-/** Какой статус получает зуб, когда лечение по плану завершено */
-function doneStatus(treatment: string): ToothStatus {
-  const t = treatment.toLowerCase();
-  if (/удален/.test(t)) return "EXTRACTED";
-  if (/коронк/.test(t)) return "CROWN";
-  if (/имплант/.test(t)) return "IMPLANT";
-  if (/пломб|реставр|канал|вкладк/.test(t)) return "FILLING";
-  return "TREATED";
-}
+import { doneToothStatus } from "./treatments";
 
 /** Зубная схема следует за планом лечения: план — единственное место, где вносится лечение */
 export async function syncToothWithPlan(patientId: string, toothNumber: number | null) {
@@ -22,10 +13,10 @@ export async function syncToothWithPlan(patientId: string, toothNumber: number |
   const has = (s: TreatmentStatus) => items.some((i) => i.status === s);
   if (has("IN_PROGRESS")) next = "IN_TREATMENT";
   else if (has("PLANNED")) {
-    if (current === "HEALTHY" || current === "TREATED" || current === "IN_TREATMENT") next = "PLANNED";
+    if (current !== "CARIES" && current !== "PLANNED") next = "PLANNED";
   } else if (items.length && items.every((i) => i.status === "DONE")) {
     const last = items[items.length - 1];
-    next = doneStatus(last.treatment);
+    next = doneToothStatus(last.treatment);
   }
   if (next !== current || !tooth) {
     await prisma.tooth.upsert({

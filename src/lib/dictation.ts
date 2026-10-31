@@ -12,30 +12,28 @@ export type DictatedItem = {
   treatment: string | null;
 };
 
-type Kw = { re: RegExp; diagnosis?: string; treatment?: string; status?: ToothStatus; noPlan?: boolean; noTooth?: boolean };
+type Kw = { re: RegExp; treatment?: string | ((m: RegExpExecArray) => string); status?: ToothStatus; noPlan?: boolean; noTooth?: boolean };
+
+const CANAL_WORDS: Record<string, number> = { "1": 1, один: 1, одного: 1, одним: 1, "2": 2, два: 2, двух: 2, "3": 3, три: 3, трех: 3, "4": 4, четыре: 4, четырех: 4 };
+const CANALS = "(?:\\s+(?:на|в)?\\s*(1|2|3|4|один|одного|два|двух|три|трех|четыре|четырех)\\s*-?\\s*(?:канал\\S*|канальн\\S*))?";
+const withCanals = (base: string) => (m: RegExpExecArray) => {
+  const n = m[1] ? CANAL_WORDS[m[1]] : undefined;
+  return n ? `${base} — ${n} ${n === 1 ? "канал" : "канала"}` : base;
+};
 
 // Порядок важен: более длинные/конкретные фразы раньше
 const KEYWORDS: Kw[] = [
-  { re: /^глубок\S*\s+кари\S*/, diagnosis: "Глубокий кариес", status: "CARIES" },
-  { re: /^средн\S*\s+кари\S*/, diagnosis: "Средний кариес", status: "CARIES" },
-  { re: /^начальн\S*\s+кари\S*/, diagnosis: "Начальный кариес", status: "CARIES" },
-  { re: /^вторичн\S*\s+кари\S*/, diagnosis: "Вторичный кариес", status: "CARIES" },
-  { re: /^кари\S*/, diagnosis: "Кариес", status: "CARIES" },
-  { re: /^пульпит\S*/, diagnosis: "Пульпит", treatment: "Лечение каналов + пломба", status: "PLANNED" },
-  { re: /^периодонтит\S*/, diagnosis: "Периодонтит", treatment: "Лечение каналов + пломба", status: "PLANNED" },
-  { re: /^(перелеч\S*|перелечивание)/, treatment: "Перелечивание каналов", status: "PLANNED" },
-  { re: /^(канал\S*|эндо\S*)/, treatment: "Лечение каналов", status: "PLANNED" },
-  { re: /^(стар\S*\s+пломб\S*|запломбирован\S*|стоит\s+пломб\S*)/, status: "FILLING", noPlan: true },
-  { re: /^(пломб\S*|запломбировать)/, treatment: "Пломба", status: "PLANNED" },
-  { re: /^реставрац\S*/, treatment: "Реставрация", status: "PLANNED" },
-  { re: /^(удал\S*|экстракц\S*)/, treatment: "Удаление", status: "PLANNED" },
+  { re: new RegExp("^пульпит\\S*" + CANALS), treatment: withCanals("Пульпит"), status: "PLANNED" },
+  { re: new RegExp("^периодонтит\\S*" + CANALS), treatment: withCanals("Периодонтит"), status: "PLANNED" },
+  { re: new RegExp("^(?:лечени\\S*\\s+)?(?:канал\\S*|эндо\\S*)" + CANALS), treatment: withCanals("Пульпит"), status: "PLANNED" },
+  { re: /^(стар\S*\s+пломб\S*|запломбирован\S*|стоит\s+пломб\S*|лечен\S*|вылечен\S*)/, status: "FILLING", noPlan: true },
+  { re: /^((глубок|средн|начальн|вторичн)\S*\s+)?(кари\S*|реставрац\S*|пломб\S*)/, treatment: "Реставрация (кариес)", status: "PLANNED" },
+  { re: /^(под\s+удаление|удал\S*|экстракц\S*)/, treatment: "Зуб под удаление", status: "PLANNED" },
   { re: /^(отсутств\S*|нет\s+зуба)/, status: "EXTRACTED", noPlan: true },
   { re: /^коронк\S*/, treatment: "Коронка", status: "PLANNED" },
-  { re: /^(вкладк\S*)/, treatment: "Вкладка", status: "PLANNED" },
-  { re: /^(имплант\S*)/, treatment: "Имплантация", status: "PLANNED" },
-  { re: /^(наблюд\S*)/, status: "OBSERVATION", noPlan: true },
+  { re: /^имплант\S*/, treatment: "Имплант", status: "PLANNED" },
   { re: /^(здоров\S*|интакт\S*)/, status: "HEALTHY", noPlan: true },
-  { re: /^(чистк\S*|гигиен\S*)/, treatment: "Профессиональная гигиена", noTooth: true },
+  { re: /^(чистк\S*|гигиен\S*)/, treatment: "Профессиональная чистка", noTooth: true },
 ];
 
 const UNITS: Record<string, number> = {
@@ -57,7 +55,7 @@ function normalize(text: string) {
     .trim();
 }
 
-type Tok = { kind: "tooth"; n: number } | { kind: "kw"; kw: Kw };
+type Tok = { kind: "tooth"; n: number } | { kind: "kw"; kw: Kw; treatment: string | null };
 
 function tokenize(text: string): Tok[] {
   const toks: Tok[] = [];
@@ -67,7 +65,8 @@ function tokenize(text: string): Tok[] {
     const kw = KEYWORDS.find((k) => k.re.test(s));
     if (kw) {
       const m = kw.re.exec(s)!;
-      toks.push({ kind: "kw", kw });
+      const treatment = typeof kw.treatment === "function" ? kw.treatment(m) : kw.treatment ?? null;
+      toks.push({ kind: "kw", kw, treatment });
       s = s.slice(m[0].length).trim();
       continue;
     }
@@ -107,7 +106,8 @@ function tokenize(text: string): Tok[] {
   return toks;
 }
 
-type Run = { kind: "teeth"; teeth: number[] } | { kind: "kws"; kws: Kw[] };
+type KwTok = { kw: Kw; treatment: string | null };
+type Run = { kind: "teeth"; teeth: number[] } | { kind: "kws"; kws: KwTok[] };
 
 export function parseDictation(text: string): DictatedItem[] {
   const runs: Run[] = [];
@@ -117,66 +117,38 @@ export function parseDictation(text: string): DictatedItem[] {
       if (last?.kind === "teeth") last.teeth.push(t.n);
       else runs.push({ kind: "teeth", teeth: [t.n] });
     } else {
-      if (last?.kind === "kws") last.kws.push(t.kw);
-      else runs.push({ kind: "kws", kws: [t.kw] });
+      const k = { kw: t.kw, treatment: t.treatment };
+      if (last?.kind === "kws") last.kws.push(k);
+      else runs.push({ kind: "kws", kws: [k] });
     }
   }
   const keywordFirst = runs[0]?.kind === "kws";
   const out: DictatedItem[] = [];
-  const used = new Set<number>();
 
-  const emit = (teeth: number[], kws: Kw[]) => {
-    const diagnosis = kws.find((k) => k.diagnosis)?.diagnosis ?? null;
-    const treatments = kws.filter((k) => k.treatment && !k.noTooth).map((k) => k.treatment!);
-    // «кариес» без лечения → по умолчанию пломба
-    if (!treatments.length && kws.some((k) => k.status === "CARIES")) treatments.push("Пломба");
-    const statusKw = kws.find((k) => k.status && k.status !== "PLANNED") ?? kws.find((k) => k.status);
-    const status = statusKw?.status ?? null;
+  const emit = (teeth: number[], kws: KwTok[]) => {
+    // «пульпит» и «реставрация» подряд — оставляем более серьёзное лечение
+    let treatments = [...new Set(kws.filter((k) => k.treatment && !k.kw.noTooth).map((k) => k.treatment!))];
+    if (treatments.some((t) => /пульпит|периодонт/i.test(t))) treatments = treatments.filter((t) => !/реставрац/i.test(t));
+    const statusKw = kws.find((k) => k.kw.noPlan && k.kw.status) ?? kws.find((k) => k.kw.status);
+    const status = statusKw?.kw.status ?? null;
     for (const tooth of teeth) {
-      if (treatments.length && !kws.every((k) => k.noPlan)) {
-        for (const tr of [...new Set(treatments)]) out.push({ tooth, status, diagnosis, treatment: tr });
-      } else {
-        out.push({ tooth, status, diagnosis, treatment: null });
-      }
+      if (treatments.length) for (const tr of treatments) out.push({ tooth, status, diagnosis: null, treatment: tr });
+      else out.push({ tooth, status, diagnosis: null, treatment: null });
     }
   };
 
   runs.forEach((r, i) => {
     if (r.kind === "kws") {
-      for (const k of r.kws.filter((k) => k.noTooth)) out.push({ tooth: null, status: null, diagnosis: null, treatment: k.treatment! });
+      for (const k of r.kws.filter((k) => k.kw.noTooth)) out.push({ tooth: null, status: null, diagnosis: null, treatment: k.treatment });
       return;
     }
     const partner = keywordFirst ? runs[i - 1] : runs[i + 1];
     const fallback = keywordFirst ? runs[i + 1] : runs[i - 1];
     const kwRun = partner?.kind === "kws" ? partner : fallback?.kind === "kws" ? fallback : null;
     if (!kwRun) return;
-    used.add(i);
-    emit(r.teeth, kwRun.kws.filter((k) => !k.noTooth));
+    emit(r.teeth, kwRun.kws.filter((k) => !k.kw.noTooth));
   });
   return out;
 }
 
-/** Подбор цены из прайса по названию лечения */
-export function findPrice(treatment: string, items: { name: string; price: number }[]): number | null {
-  const t = treatment.toLowerCase();
-  const stems: [RegExp, RegExp][] = [
-    [/перелеч/, /перелеч/],
-    [/канал/, /канал|эндо|пульпит/],
-    [/пломб/, /пломб|кариес|реставр/],
-    [/реставр/, /реставр|пломб/],
-    [/удален/, /удален/],
-    [/коронк/, /коронк/],
-    [/вкладк/, /вкладк/],
-    [/имплант/, /имплант/],
-    [/гигиен/, /гигиен|чистк/],
-  ];
-  const exact = items.find((i) => i.name.toLowerCase() === t);
-  if (exact) return exact.price;
-  for (const [cond, match] of stems) {
-    if (cond.test(t)) {
-      const hit = items.find((i) => match.test(i.name.toLowerCase()));
-      if (hit) return hit.price;
-    }
-  }
-  return null;
-}
+export { findPrice } from "./treatments";

@@ -9,19 +9,18 @@ import { isValidTooth } from "@/lib/teeth";
 import { findPrice, type DictatedItem } from "@/lib/dictation";
 import { priceItemsFor, syncToothWithPlan } from "@/lib/plan";
 
-/** Состояние зуба (диагноз, заметки). Лечение и цены — в плане лечения. */
+/** Состояние зуба и заметка. Лечение и цены — в плане лечения. */
 export async function saveTooth(patientId: string, number: number, formData: FormData) {
   await requireUser();
   if (!isValidTooth(number)) throw new Error("Неверный номер зуба");
+  const hasStatus = typeof formData.get("status") === "string" && formData.get("status") !== "";
   const data = {
-    status: oneOf(formData, "status", values(TOOTH_STATUS), "HEALTHY"),
-    diagnosis: optStr(formData, "diagnosis", 300),
-    problem: optStr(formData, "problem", 300),
+    ...(hasStatus ? { status: oneOf(formData, "status", values(TOOTH_STATUS), "HEALTHY") } : {}),
     notes: optStr(formData, "notes", 3000),
   };
   await prisma.tooth.upsert({
     where: { patientId_number: { patientId, number } },
-    create: { patientId, number, ...data },
+    create: { patientId, number, status: "HEALTHY", ...data },
     update: data,
   });
   revalidatePath(`/patients/${patientId}`);
@@ -44,11 +43,11 @@ export async function applyDictation(patientId: string, payload: string) {
   for (const it of items.slice(0, 100)) {
     const tooth = it.tooth !== null && isValidTooth(Number(it.tooth)) ? Number(it.tooth) : null;
     const status = it.status && values(TOOTH_STATUS).includes(it.status) ? it.status : null;
-    if (tooth !== null && (status || it.diagnosis)) {
+    if (tooth !== null && status) {
       await prisma.tooth.upsert({
         where: { patientId_number: { patientId, number: tooth } },
-        create: { patientId, number: tooth, status: status ?? "HEALTHY", diagnosis: it.diagnosis },
-        update: { ...(status ? { status } : {}), ...(it.diagnosis ? { diagnosis: it.diagnosis } : {}) },
+        create: { patientId, number: tooth, status },
+        update: { status },
       });
     }
     if (it.treatment) {
@@ -57,7 +56,6 @@ export async function applyDictation(patientId: string, payload: string) {
         data: {
           patientId,
           toothNumber: tooth,
-          diagnosis: it.diagnosis ? String(it.diagnosis).slice(0, 300) : null,
           treatment,
           price: findPrice(treatment, prices) ?? 0,
           sortOrder: order++,
@@ -66,10 +64,6 @@ export async function applyDictation(patientId: string, payload: string) {
       if (tooth !== null) touched.add(tooth);
     }
   }
-  // Диагноз (кариес/пульпит) оставляем как статус зуба; для остальных — «лечение запланировано»
-  for (const t of touched) {
-    const tooth = await prisma.tooth.findUnique({ where: { patientId_number: { patientId, number: t } } });
-    if (!tooth || tooth.status === "HEALTHY") await syncToothWithPlan(patientId, t);
-  }
+  for (const t of touched) await syncToothWithPlan(patientId, t);
   revalidatePath(`/patients/${patientId}`);
 }

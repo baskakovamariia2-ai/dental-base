@@ -2,7 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
-import { teethStats, ALL_TEETH } from "@/lib/teeth";
+import { patientStats, ALL_TEETH } from "@/lib/teeth";
+import { getReminderTemplate, reminderText } from "@/lib/reminder";
+import { ReminderButton } from "@/components/reminder-button";
 import { fileSize, fmtDate, fmtDateTime, fullName, initials, money, phoneHref, telegramHref } from "@/lib/format";
 import { toISODate } from "@/lib/dates";
 import { FILE_CATEGORY, PATIENT_SOURCE, PATIENT_STATUS, TREATMENT_STATUS, findOpt } from "@/lib/labels";
@@ -13,7 +15,7 @@ import { AutoSubmitSelect, ConfirmButton } from "@/components/auto-submit";
 import { Odontogram, type PriceOption } from "@/components/odontogram";
 import { DictationBox } from "@/components/dictation";
 import { FileUpload } from "@/components/file-upload";
-import { TreatmentPriceFields } from "@/components/price-picker";
+import { TreatmentFields } from "@/components/price-picker";
 import { Badge, Empty, Field, Stat } from "@/components/ui";
 import { IconBack, IconCalendar, IconPhone, IconPlus, IconTooth } from "@/components/icons";
 
@@ -57,9 +59,10 @@ export default async function PatientPage({
 
   const priceLists = await prisma.priceList.findMany({ orderBy: { createdAt: "asc" }, include: { items: { orderBy: { sortOrder: "asc" } } } });
   const effectiveList = patient.priceList ?? priceLists.find((l) => l.isDefault) ?? null;
-  const priceOptions: PriceOption[] = (effectiveList?.items ?? []).map((i) => ({ name: i.name, price: i.price, group: effectiveList!.name }));
+  const priceOptions: PriceOption[] = (effectiveList?.items ?? []).map((i) => ({ name: i.name, price: i.price }));
+  const tpl = await getReminderTemplate();
 
-  const stats = teethStats(patient.teeth);
+  const stats = patientStats(patient.teeth, patient.treatmentItems);
   const st = findOpt(PATIENT_STATUS, patient.status);
   const lastVisit = patient.visits[0]?.date ?? null;
   const nextVisit = patient.appointments[0] ?? null;
@@ -105,6 +108,16 @@ export default async function PatientPage({
           <a href={tg} target="_blank" rel="noopener noreferrer" className="btn shrink-0 bg-[#2AABEE] text-white hover:bg-[#229ED9]">
             ✈︎ Telegram
           </a>
+        )}
+        {nextVisit && (
+          <ReminderButton
+            appointmentId={nextVisit.id}
+            text={reminderText(tpl, nextVisit.startsAt)}
+            telegram={tg}
+            sent={nextVisit.reminderSent}
+            className="btn-secondary shrink-0"
+            label="🔔 Напомнить о приёме"
+          />
         )}
         <Link href={`/schedule/new?patient=${patient.id}`} className="btn-accent shrink-0"><IconCalendar /> Записать на приём</Link>
         <Link href={`/visits/new?patient=${patient.id}`} className="btn-secondary shrink-0"><IconTooth /> Добавить приём</Link>
@@ -156,7 +169,7 @@ export default async function PatientPage({
           </div>
 
           <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-            <Stat label="Осталось лечить" value={stats.toTreat} hint="зубов" />
+            <Stat label="Проблемных зубов" value={stats.problem} />
             <Stat label="По плану" value={money(planTotal)} />
             <Stat label="Оплачено" value={money(planPaid)} />
             <Stat label="Осталось оплатить" value={money(Math.max(0, planTotal - planPaid))} />
@@ -181,21 +194,21 @@ export default async function PatientPage({
             <Odontogram
               patientId={patient.id}
               prices={priceOptions}
-              teeth={patient.teeth.map((t) => ({ number: t.number, status: t.status, diagnosis: t.diagnosis, problem: t.problem, notes: t.notes }))}
+              teeth={patient.teeth.map((t) => ({ number: t.number, status: t.status, notes: t.notes }))}
               plan={planItems.map((i) => ({ id: i.id, toothNumber: i.toothNumber, treatment: i.treatment, price: i.price, status: i.status }))}
             />
           </div>
           <div>
             <h2 className="section-title">Общая ситуация</h2>
             <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-              <Stat label="С кариесом" value={stats.caries} />
-              <Stat label="Осталось лечить" value={stats.toTreat} hint="кариес + запланировано + лечится" />
-              <Stat label="С пломбами" value={stats.fillings} />
-              <Stat label="Наблюдение" value={stats.observation} />
-              <Stat label="Вылечено" value={stats.treated} />
+              <Stat label="Кариес (реставрация)" value={stats.caries} />
+              <Stat label="Лечение каналов" value={stats.canals} />
+              <Stat label="Периодонтит" value={stats.periodontitis} />
+              <Stat label="Под удаление" value={stats.extraction} />
               <Stat label="Коронки" value={stats.crowns} />
-              <Stat label="Импланты" value={stats.implants} />
-              <Stat label="Удалено" value={stats.extracted} hint={`зубов в наличии: ${stats.present}`} />
+              <Stat label="Проблемных зубов" value={stats.problem} />
+              <Stat label="Леченых зубов" value={stats.treated} />
+              <Stat label="Отсутствуют" value={stats.missing} />
             </div>
           </div>
         </div>
@@ -211,17 +224,16 @@ export default async function PatientPage({
             <Empty>План пуст. Надиктуйте формулу на вкладке «Лечение» или добавьте пункт ниже.</Empty>
           ) : (
             <div className="card divide-y divide-zinc-100 overflow-hidden">
-              <div className="hidden grid-cols-[56px_1fr_1fr_110px_170px_40px] gap-3 px-4 py-2.5 text-xs font-medium text-ink-mute md:grid">
-                <span>Зуб</span><span>Диагноз</span><span>Лечение</span><span className="text-right">Цена</span><span>Статус</span><span />
+              <div className="hidden grid-cols-[56px_1fr_110px_170px_40px] gap-3 px-4 py-2.5 text-xs font-medium text-ink-mute md:grid">
+                <span>Зуб</span><span>Лечение</span><span className="text-right">Цена</span><span>Статус</span><span />
               </div>
               {planItems.map((i) => (
                 <div key={i.id} className={`px-4 py-3 ${i.status === "CANCELLED" ? "opacity-50" : ""}`}>
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2 md:grid md:grid-cols-[56px_1fr_1fr_110px_170px_40px]">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2 md:grid md:grid-cols-[56px_1fr_110px_170px_40px]">
                     <span className="text-[15px] font-semibold tabular-nums">{i.toothNumber ?? "—"}</span>
-                    <span className="hidden text-sm text-ink-soft md:block">{i.diagnosis ?? "—"}</span>
                     <span className="min-w-0 flex-1 text-[15px] md:flex-none">
                       {i.treatment}
-                      {i.diagnosis && <span className="block text-xs text-ink-mute md:hidden">{i.diagnosis}</span>}
+                      {i.note && <span className="block text-xs text-ink-mute">{i.note}</span>}
                     </span>
                     <span className={`text-right text-[15px] font-medium tabular-nums ${i.price ? "" : "text-orange-600"}`}>{i.price ? money(i.price) : "нет цены"}</span>
                     <form action={updateTreatmentItem.bind(null, i.id)}>
@@ -243,7 +255,7 @@ export default async function PatientPage({
                       <summary className="cursor-pointer list-none rounded-lg px-2 py-1 text-xs text-ink-mute hover:bg-zinc-100">Изменить</summary>
                       <form action={updateTreatmentItem.bind(null, i.id)} className="mt-2 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-end">
                         <label className="col-span-2 block"><span className="label">Лечение</span><input name="treatment" defaultValue={i.treatment} className="input sm:w-56" /></label>
-                        <label className="col-span-2 block"><span className="label">Диагноз</span><input name="diagnosis" defaultValue={i.diagnosis ?? ""} className="input sm:w-48" /></label>
+                        <label className="col-span-2 block"><span className="label">Заметка</span><input name="note" defaultValue={i.note ?? ""} className="input sm:w-48" /></label>
                         <label className="block"><span className="label">Цена</span><input name="price" inputMode="numeric" defaultValue={i.price} className="input sm:w-28" /></label>
                         <label className="block"><span className="label">Оплачено</span><input name="paid" inputMode="numeric" defaultValue={i.paid} className="input sm:w-28" /></label>
                         <button className="btn-primary btn-sm col-span-2 h-11">Сохранить</button>
@@ -270,8 +282,7 @@ export default async function PatientPage({
                   {[...ALL_TEETH].sort((a, b) => a - b).map((n) => <option key={n} value={n}>{n}</option>)}
                 </select>
               </Field>
-              <Field label="Диагноз"><input name="diagnosis" placeholder="возьмётся из схемы, если пусто" className="input" /></Field>
-              <TreatmentPriceFields prices={priceOptions} />
+              <TreatmentFields prices={priceOptions} />
               <Field label="Статус">
                 <select name="status" defaultValue="PLANNED" className="input">
                   {TREATMENT_STATUS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}

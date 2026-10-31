@@ -1,13 +1,15 @@
 import Link from "next/link";
 import type { Appointment, Patient, User } from "@prisma/client";
-import { setAppointmentStatus, toggleReminder } from "@/actions/appointments";
+import { setAppointmentStatus } from "@/actions/appointments";
+import { reminderText } from "@/lib/reminder";
+import { ReminderButton } from "./reminder-button";
 import { APPOINTMENT_STATUS } from "@/lib/labels";
 import { fmtTime, fullName, telegramHref } from "@/lib/format";
 import { AutoSubmitSelect } from "./auto-submit";
 
 export type AppointmentWith = Appointment & { patient: Patient; doctor: User | null };
 
-export function AppointmentRow({ a, returnTo, showDate }: { a: AppointmentWith; returnTo: string; showDate?: boolean }) {
+export function AppointmentRow({ a, returnTo, showDate, reminderTemplate }: { a: AppointmentWith; returnTo: string; showDate?: boolean; reminderTemplate: string }) {
   const end = new Date(a.startsAt.getTime() + a.durationMin * 60000);
   const cancelled = a.status === "CANCELLED" || a.status === "NO_SHOW";
   return (
@@ -33,19 +35,8 @@ export function AppointmentRow({ a, returnTo, showDate }: { a: AppointmentWith; 
             <input type="hidden" name="returnTo" value={returnTo} />
             <AutoSubmitSelect name="status" defaultValue={a.status} options={APPOINTMENT_STATUS} ariaLabel="Статус записи" />
           </form>
-          <form action={toggleReminder.bind(null, a.id)}>
-            <input type="hidden" name="returnTo" value={returnTo} />
-            <button
-              className={`rounded-lg px-2.5 py-1.5 text-xs font-medium ${a.reminderSent ? "bg-emerald-50 text-emerald-700" : "bg-zinc-100 text-ink-soft"}`}
-              title={a.reminderSent ? "Отметить как не отправленное" : "Отметить, что напоминание отправлено"}
-            >
-              {a.reminderSent ? "✓ Напоминание отправлено" : "Напомнить пациенту"}
-            </button>
-          </form>
-          {telegramHref(a.patient) && (
-            <a href={telegramHref(a.patient)!} target="_blank" rel="noopener noreferrer" className="rounded-lg bg-sky-50 px-2.5 py-1.5 text-xs font-medium text-[#229ED9]">
-              Telegram
-            </a>
+          {!cancelled && a.status !== "DONE" && (
+            <ReminderButton appointmentId={a.id} text={reminderText(reminderTemplate, a.startsAt)} telegram={telegramHref(a.patient)} sent={a.reminderSent} />
           )}
           <Link href={`/schedule/${a.id}`} className="rounded-lg px-2 py-1.5 text-xs text-ink-mute hover:bg-zinc-100">
             Изменить
