@@ -371,7 +371,7 @@ export default async function PatientPage({
                       <textarea name="text" rows={2} defaultValue={f.text} className="input text-[15px]" aria-label="Находка" />
                       <div className="flex flex-wrap items-center gap-2">
                         <select name="status" defaultValue={f.status ?? ""} className="input w-auto flex-1 py-2 text-sm sm:flex-none" aria-label="Состояние зуба в схеме">
-                          <option value="">Схему не менять</option>
+                          <option value="">Не отмечать в схеме</option>
                           {TOOTH_STATUS.filter((o) => (AI_STATUSES as readonly string[]).includes(o.value)).map((o) => (
                             <option key={o.value} value={o.value}>В схеме: {o.label}</option>
                           ))}
