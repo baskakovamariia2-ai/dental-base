@@ -62,15 +62,25 @@ export const TREATMENT_STATUS: Opt<TreatmentStatus>[] = [
   { value: "CANCELLED", label: "Отменено", cls: "bg-zinc-50 text-zinc-400 ring-zinc-200" },
 ];
 
+/** Категории инвентаря (композиты — это материалы; средства защиты — расходники) */
 export const INVENTORY_CATEGORY: Opt<InventoryCategory>[] = [
-  { value: "INSTRUMENTS", label: "Инструменты", cls: "" },
   { value: "CONSUMABLES", label: "Расходники", cls: "" },
-  { value: "COMPOSITES", label: "Композиты", cls: "" },
-  { value: "ANESTHESIA", label: "Анестезия", cls: "" },
-  { value: "PROTECTION", label: "Средства защиты", cls: "" },
   { value: "MATERIALS", label: "Материалы", cls: "" },
+  { value: "ANESTHESIA", label: "Анестезия", cls: "" },
+  { value: "INSTRUMENTS", label: "Инструменты", cls: "" },
   { value: "OTHER", label: "Другое", cls: "" },
 ];
+export const INVENTORY_CATEGORY_ALL: Opt<InventoryCategory>[] = [
+  ...INVENTORY_CATEGORY,
+  { value: "COMPOSITES", label: "Материалы", cls: "" },
+  { value: "PROTECTION", label: "Расходники", cls: "" },
+];
+/** Категории, которые входят в фильтр (старые «Композиты» показываются в «Материалах») */
+export function categoryGroup(c: string): InventoryCategory[] {
+  if (c === "MATERIALS") return ["MATERIALS", "COMPOSITES"];
+  if (c === "CONSUMABLES") return ["CONSUMABLES", "PROTECTION"];
+  return [c as InventoryCategory];
+}
 
 export function findOpt<T extends string, O extends { value: T }>(list: O[], v: T): O {
   return list.find((o) => o.value === v) ?? list[0];

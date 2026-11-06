@@ -18,7 +18,13 @@ export function ItemForm({
     <form action={action} className="space-y-4">
       <div className="card card-pad grid gap-4 sm:grid-cols-2">
         <Field label="Название *" className="sm:col-span-2"><input name="name" required defaultValue={item?.name} placeholder="Композит Filtek A2" className="input" /></Field>
-        <Field label="Категория"><Select name="category" options={INVENTORY_CATEGORY} defaultValue={item?.category ?? "CONSUMABLES"} /></Field>
+        <Field label="Категория">
+          <Select
+            name="category"
+            options={[{ value: "AUTO", label: "Определить автоматически" }, ...INVENTORY_CATEGORY]}
+            defaultValue={item ? (item.category === "COMPOSITES" ? "MATERIALS" : item.category === "PROTECTION" ? "CONSUMABLES" : item.category) : "AUTO"}
+          />
+        </Field>
         <Field label="Единица измерения">
           <input name="unit" defaultValue={item?.unit ?? "шт."} list="units" className="input" />
           <datalist id="units">{["шт.", "уп.", "шприц", "карпула", "мл", "г", "набор"].map((u) => <option key={u} value={u} />)}</datalist>

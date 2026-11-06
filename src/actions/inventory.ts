@@ -8,6 +8,7 @@ import { num, oneOf, optInt, optStr, str } from "@/lib/forms";
 import type { ParsedStock } from "@/lib/parse-lists";
 import { parseISODate } from "@/lib/dates";
 import { INVENTORY_CATEGORY, values } from "@/lib/labels";
+import { guessCategory } from "@/lib/inventory-category";
 
 async function supplierIdFrom(fd: FormData): Promise<string | null> {
   const name = str(fd, "supplier", 150);
@@ -19,7 +20,7 @@ async function supplierIdFrom(fd: FormData): Promise<string | null> {
 function readItem(fd: FormData) {
   return {
     name: str(fd, "name", 200),
-    category: oneOf(fd, "category", values(INVENTORY_CATEGORY), "OTHER"),
+    category: str(fd, "category") === "AUTO" || !str(fd, "category") ? guessCategory(str(fd, "name", 200)) : oneOf(fd, "category", values(INVENTORY_CATEGORY), "OTHER"),
     quantity: Math.max(0, num(fd, "quantity")),
     unit: str(fd, "unit", 30) || "шт.",
     minQuantity: Math.max(0, num(fd, "minQuantity")),
@@ -141,7 +142,25 @@ export async function importInventory(payload: string) {
     };
     const existing = await prisma.inventoryItem.findFirst({ where: { archivedAt: null, name: { equals: name, mode: "insensitive" } } });
     if (existing) await prisma.inventoryItem.update({ where: { id: existing.id }, data });
-    else await prisma.inventoryItem.create({ data: { name, ...data } });
+    else await prisma.inventoryItem.create({ data: { name, category: guessCategory(name), ...data } });
   }
+  refresh();
+}
+
+/** Разложить все позиции по категориям автоматически (по названию) */
+export async function autoCategorize() {
+  await requireUser();
+  const items = await prisma.inventoryItem.findMany({ where: { archivedAt: null } });
+  for (const i of items) {
+    const category = guessCategory(i.name);
+    if (category !== i.category) await prisma.inventoryItem.update({ where: { id: i.id }, data: { category } });
+  }
+  refresh();
+}
+
+/** Удалить весь инвентарь (позиции убираются из списка; история закупок остаётся в базе) */
+export async function clearInventory() {
+  await requireUser();
+  await prisma.inventoryItem.updateMany({ where: { archivedAt: null }, data: { archivedAt: new Date(), toBuyQuantity: null } });
   refresh();
 }

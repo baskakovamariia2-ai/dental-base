@@ -4,7 +4,9 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { fmtQty, money } from "@/lib/format";
 import { toISODate } from "@/lib/dates";
-import { INVENTORY_CATEGORY, STOCK_LEVEL, findOpt } from "@/lib/labels";
+import { INVENTORY_CATEGORY, INVENTORY_CATEGORY_ALL, STOCK_LEVEL, categoryGroup, findOpt } from "@/lib/labels";
+import { autoCategorize, clearInventory } from "@/actions/inventory";
+import { ConfirmButton } from "@/components/auto-submit";
 import { adjustQuantity, recordPurchase, setLevel, setToBuy } from "@/actions/inventory";
 import { Empty, PageHeader } from "@/components/ui";
 import { IconPlus, IconSearch } from "@/components/icons";
@@ -18,7 +20,7 @@ export default async function InventoryPage({
   const { tab = "all", cat = "", q = "" } = await searchParams;
 
   const where: Prisma.InventoryItemWhereInput = { archivedAt: null };
-  if (cat && INVENTORY_CATEGORY.some((c) => c.value === cat)) where.category = cat as InventoryCategory;
+  if (cat && INVENTORY_CATEGORY.some((c) => c.value === cat)) where.category = { in: categoryGroup(cat) };
   if (q.trim()) where.name = { contains: q.trim(), mode: "insensitive" };
   if (tab === "buy") where.toBuyQuantity = { not: null };
 
@@ -94,7 +96,7 @@ export default async function InventoryPage({
                       <span className="truncate text-[15px] font-medium">{i.name}</span>
                     </div>
                     <div className="truncate text-xs text-ink-mute">
-                      {findOpt(INVENTORY_CATEGORY, i.category).label}
+                      {findOpt(INVENTORY_CATEGORY_ALL, i.category).label}
                       {i.countable ? ` · мин. ${fmtQty(i.minQuantity)} ${i.unit}` : ""}
                       {price ? ` · ${money(price)}` : ""}
                       {i.comment ? ` · ${i.comment}` : ""}
@@ -163,6 +165,16 @@ export default async function InventoryPage({
               </div>
             );
           })}
+        </div>
+      )}
+      {tab === "all" && all.length > 0 && (
+        <div className="mt-8 flex flex-wrap gap-2 border-t border-zinc-200 pt-6">
+          <form action={autoCategorize}>
+            <button className="btn-secondary">✨ Разложить по категориям</button>
+          </form>
+          <form action={clearInventory}>
+            <ConfirmButton message="Удалить ВЕСЬ инвентарь? Все позиции пропадут из списка (история закупок сохранится в базе).">Удалить весь инвентарь</ConfirmButton>
+          </form>
         </div>
       )}
     </div>

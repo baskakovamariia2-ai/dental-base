@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { fmtDate, fmtQty, money } from "@/lib/format";
 import { toISODate } from "@/lib/dates";
-import { INVENTORY_CATEGORY, STOCK_LEVEL, findOpt } from "@/lib/labels";
+import { INVENTORY_CATEGORY_ALL, STOCK_LEVEL, findOpt } from "@/lib/labels";
 import { adjustQuantity, recordPurchase, setLevel, setToBuy } from "@/actions/inventory";
 import { Empty, PageHeader } from "@/components/ui";
 
@@ -21,7 +21,7 @@ export default async function ItemPage({ params }: { params: Promise<{ id: strin
 
   return (
     <div className="space-y-4">
-      <PageHeader title={item.name} subtitle={findOpt(INVENTORY_CATEGORY, item.category).label} back="/inventory" action={<Link href={`/inventory/${id}/edit`} className="btn-secondary">Изменить</Link>} />
+      <PageHeader title={item.name} subtitle={findOpt(INVENTORY_CATEGORY_ALL, item.category).label} back="/inventory" action={<Link href={`/inventory/${id}/edit`} className="btn-secondary">Изменить</Link>} />
 
       {!item.countable && (
         <div className="card card-pad">
