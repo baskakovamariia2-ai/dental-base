@@ -7,7 +7,7 @@ import { prisma } from "@/lib/db";
 import { requireRole, requireUser } from "@/lib/auth";
 import { str } from "@/lib/forms";
 import { isValidTooth } from "@/lib/teeth";
-import { AI_STATUSES, AiError, KEY_SETTING, getGigachatKey, testKey } from "@/lib/gigachat";
+import { AI_STATUSES, AiError, KEY_SETTING, PROMPT_SETTING, getGigachatKey, testKey } from "@/lib/gigachat";
 
 /** Врач подтвердил находку: записываем в карту зуба (заметка + по желанию состояние) и убираем из списка */
 export async function confirmFinding(id: string, formData: FormData) {
@@ -82,4 +82,13 @@ export async function checkGigachatKey() {
     redirect(`/more?ai=${e instanceof AiError && /не подходит/.test(e.message) ? "bad" : "net"}#ai`);
   }
   redirect("/more?ai=ok#ai");
+}
+
+/** Инструкция для ИИ (что искать на снимке). Пусто или «Вернуть исходную» — стандартная. */
+export async function saveCtPrompt(formData: FormData) {
+  await requireUser();
+  const value = str(formData, "prompt", 4000);
+  if (formData.get("reset") === "1" || !value) await prisma.setting.deleteMany({ where: { key: PROMPT_SETTING } });
+  else await prisma.setting.upsert({ where: { key: PROMPT_SETTING }, create: { key: PROMPT_SETTING, value }, update: { value } });
+  redirect("/more?ai=prompt#ai");
 }

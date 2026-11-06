@@ -82,17 +82,75 @@ export type Finding = { tooth: number | null; text: string; status: string | nul
 // Состояния, которые ИИ может предложить для зубной схемы (врач подтверждает)
 export const AI_STATUSES = ["CARIES", "FILLING", "CROWN", "IMPLANT", "EXTRACTED", "OBSERVATION"] as const;
 
-const SYSTEM_PROMPT = `Ты помощник врача-стоматолога. Тебе показывают скриншот КЛКТ (конусно-лучевой компьютерной томографии): срез или панорамную реконструкцию.
-Найди на снимке зубы и коротко перечисли находки по каждому зубу, где что-то есть. Это черновик для врача, он подтвердит или отклонит каждую находку.
-Правила:
-- Номера зубов по FDI (11–48). Если номер определить нельзя — "tooth": null.
-- Отмечай: признаки кариеса, пломбы, коронки, импланты, штифты, леченые/нелеченые каналы, расширение периодонтальной щели, очаги у верхушек корней, убыль кости, отсутствующие и ретинированные зубы.
-- "status" — одно из: CARIES (кариес), FILLING (пломба), CROWN (коронка), IMPLANT (имплант), EXTRACTED (зуб отсутствует), OBSERVATION (нужно понаблюдать: очаг, расширение щели и т.п.), или null.
-- "confidence" — "низкая", "средняя" или "высокая".
-- Обязательно перечисли все видимые пломбы, коронки, импланты, леченые каналы и отсутствующие зубы, даже если они в порядке. Полностью здоровые зубы без изменений не перечисляй.
-- Ничего не выдумывай. Если снимок нечёткий или ты не видишь зубов — верни одну находку с "tooth": null и опиши, что видишь. Пустой массив не возвращай.
-- Ответ — ТОЛЬКО JSON-массив, без пояснений, например:
-[{"tooth":36,"text":"признаки кариеса на жевательной поверхности","status":"CARIES","confidence":"средняя"},{"tooth":46,"text":"очаг разрежения у верхушки медиального корня","status":"OBSERVATION","confidence":"низкая"}]`;
+export const PROMPT_SETTING = "ctPrompt";
+
+// Что искать — эту часть можно менять в «Ещё → ИИ для КТ»
+export const DEFAULT_CT_PROMPT = `Ты опытный врач-рентгенолог в стоматологии. Тебе показывают скриншот КЛКТ (конусно-лучевой компьютерной томографии): срез или панорамную реконструкцию.
+Внимательно посмотри на каждый видимый зуб и перечисли всё, что видишь:
+- пломбы, коронки, импланты, штифты;
+- леченые и нелеченые каналы;
+- признаки кариеса;
+- расширение периодонтальной щели, очаги разрежения у верхушек корней;
+- убыль костной ткани;
+- отсутствующие и ретинированные зубы.
+Это черновик для врача — он сам проверит каждую строку, поэтому пиши и то, в чём не уверен, с пометкой «уверенность: низкая».`;
+
+// Формат ответа — фиксированный, чтобы программа могла разобрать строки
+const FORMAT_RULES = `
+Формат ответа (строго):
+Первая строка: «Снимок: …» — одной фразой, что изображено (например, «панорамная реконструкция, видны оба зубных ряда»).
+Дальше — по одной строке на находку: «<номер зуба по FDI> — <что видно> (уверенность: низкая/средняя/высокая)».
+Пример:
+Снимок: панорамная реконструкция, видны оба зубных ряда
+36 — пломба на жевательной поверхности, под ней возможен вторичный кариес (уверенность: средняя)
+46 — каналы запломбированы, у верхушки медиального корня очаг разрежения (уверенность: низкая)
+18 — зуб отсутствует (уверенность: высокая)
+Если номер зуба определить нельзя, начни строку с «?». Без вступлений и советов по лечению.`;
+
+export async function getCtPrompt(): Promise<{ value: string; custom: boolean }> {
+  const row = await prisma.setting.findUnique({ where: { key: PROMPT_SETTING } });
+  return row?.value?.trim() ? { value: row.value, custom: true } : { value: DEFAULT_CT_PROMPT, custom: false };
+}
+
+/** Угадывает состояние зуба для схемы по словам в находке */
+function guessStatus(t: string): string | null {
+  const s = t.toLowerCase();
+  if (/отсутств|удал[её]н/.test(s)) return "EXTRACTED";
+  if (/имплант/.test(s)) return "IMPLANT";
+  if (/коронк/.test(s)) return "CROWN";
+  if (/кариес/.test(s)) return "CARIES";
+  if (/очаг|разрежен|периодонт|гранулём|киста|расширен/.test(s)) return "OBSERVATION";
+  if (/пломб/.test(s)) return "FILLING";
+  return null;
+}
+
+/** Разбирает построчный ответ: «36 — находка (уверенность: средняя)» */
+function parseLines(raw: string): Finding[] {
+  const out: Finding[] = [];
+  for (let line of raw.split(/\r?\n/)) {
+    line = line.replace(/^[\s>*•\-–—\d.)]*?(?=(\?|\d{2}\b|снимок|зуб|[А-ЯЁа-яё]))/i, "").replace(/\*\*/g, "").trim();
+    if (!line) continue;
+    const conf = line.match(/\(?\s*уверенность\s*[:\-–]?\s*(низкая|средняя|высокая)\s*\)?/i);
+    const clean = (str: string) => str.replace(/\(?\s*уверенность\s*[:\-–]?\s*(низкая|средняя|высокая)\s*\)?/i, "").replace(/^[\s:—–\-]+/, "").trim();
+    const m = line.match(/^(?:зуб\s*)?((?:\d{2}\s*[,и]\s*)*\d{2})\s*[—–\-:]\s*(.+)$/i);
+    if (m) {
+      const text = clean(m[2]);
+      for (const n of m[1].split(/[,и\s]+/).map(Number)) {
+        if (n >= 11 && n <= 48 && text) out.push({ tooth: n, text, status: guessStatus(text), confidence: conf?.[1].toLowerCase() ?? null });
+      }
+      continue;
+    }
+    if (/^снимок\s*:/i.test(line)) {
+      out.push({ tooth: null, text: line, status: null, confidence: null });
+      continue;
+    }
+    if (line.startsWith("?")) {
+      const text = clean(line.slice(1));
+      if (text) out.push({ tooth: null, text, status: guessStatus(text), confidence: conf?.[1].toLowerCase() ?? null });
+    }
+  }
+  return out.map((f) => ({ ...f, text: f.text.slice(0, 500) })).slice(0, 40);
+}
 
 /** Берёт первое непустое строковое поле из списка возможных названий */
 function pickText(x: Record<string, unknown>): string {
@@ -108,7 +166,7 @@ function pickText(x: Record<string, unknown>): string {
 
 /** Разбирает ответ модели. Если находок не получилось — весь ответ ИИ становится одной находкой, чтобы врач его увидел. */
 export function parseFindings(raw: string): Finding[] {
-  const m = raw.match(/\[[\s\S]*\]/);
+  const m = raw.trim().startsWith("[") ? raw.match(/\[[\s\S]*\]/) : null;
   if (m) {
     try {
       const arr = JSON.parse(m[0]) as Record<string, unknown>[];
@@ -133,8 +191,11 @@ export function parseFindings(raw: string): Finding[] {
       /* ниже — запасной вариант */
     }
   }
+  const lines = parseLines(raw);
+  // одна строка «Снимок: …» без находок — тоже показываем весь ответ
+  if (lines.some((f) => f.tooth !== null || !/^снимок/i.test(f.text))) return lines;
   const text = raw.replace(/```(json)?/g, "").trim();
-  const shown = !text || text === "[]" ? "ИИ не нашёл на снимке ничего, о чём стоит сообщить." : `Ответ ИИ: ${text}`;
+  const shown = !text || text === "[]" ? "ИИ ничего не ответил по этому снимку." : `Ответ ИИ: ${text}`;
   return [{ tooth: null, text: shown.slice(0, 1000), status: null, confidence: null }];
 }
 
@@ -143,6 +204,7 @@ export async function analyzeCtImage(image: Buffer): Promise<Finding[]> {
   const key = await getGigachatKey();
   if (!key) throw new AiError("Не указан ключ ГигаЧата. Его вводят в разделе «Ещё → ИИ для КТ».");
   const token = await getToken(key);
+  const prompt = (await getCtPrompt()).value;
 
   // 1. Временно загружаем картинку в ГигаЧат (ниже сразу удаляем)
   const fd = new FormData();
@@ -161,11 +223,11 @@ export async function analyzeCtImage(image: Buffer): Promise<Finding[]> {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model,
-          temperature: 0.1,
+          temperature: 0.3,
           max_tokens: 1500,
           messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            { role: "user", content: "Перечисли находки по зубам на этом снимке.", attachments: [fileId] },
+            { role: "system", content: prompt + "\n" + FORMAT_RULES },
+            { role: "user", content: "Посмотри на этот снимок и перечисли находки по зубам в указанном формате.", attachments: [fileId] },
           ],
         }),
       });
