@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { addMonths, startOfMonth } from "@/lib/dates";
@@ -37,6 +38,10 @@ export default async function StatsPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Статистика" back="/more" />
+      <Link href="/earnings" className="card flex items-center justify-between px-4 py-4 hover:ring-accent/30">
+        <span className="font-medium">💰 Заработок по месяцам</span>
+        <span className="text-sm text-accent">Открыть</span>
+      </Link>
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
         <Stat label="Пациентов всего" value={total} />
         <Stat label={`Новых за ${monthName}`} value={newMonth} />

@@ -371,3 +371,13 @@ model Setting {
   value     String
   updatedAt DateTime @updatedAt
 }
+
+// ───────────── Расходы по дням (если аренда в конкретный день отличалась) ─────────────
+
+model DayExpense {
+  date          String   @id // YYYY-MM-DD
+  rent          Int
+  sterilization Int
+  note          String?
+  updatedAt     DateTime @updatedAt
+}

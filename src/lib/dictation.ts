@@ -30,10 +30,13 @@ const KEYWORDS: Kw[] = [
   { re: /^((глубок|средн|начальн|вторичн)\S*\s+)?(кари\S*|реставрац\S*|пломб\S*)/, treatment: "Реставрация (кариес)", status: "PLANNED" },
   { re: /^(под\s+удаление|удал\S*|экстракц\S*)/, treatment: "Зуб под удаление", status: "PLANNED" },
   { re: /^(отсутств\S*|нет\s+зуба)/, status: "EXTRACTED", noPlan: true },
+  { re: /^(коронк\S*\s+(из\s+)?)?(стекло\s*)?керамик\S*/, treatment: "Коронка стеклокерамика", status: "PLANNED" },
+  { re: /^(коронк\S*\s+(из\s+)?)?циркон\S*/, treatment: "Коронка цирконий", status: "PLANNED" },
   { re: /^коронк\S*/, treatment: "Коронка", status: "PLANNED" },
   { re: /^имплант\S*/, treatment: "Имплант", status: "PLANNED" },
   { re: /^(здоров\S*|интакт\S*)/, status: "HEALTHY", noPlan: true },
   { re: /^(чистк\S*|гигиен\S*)/, treatment: "Профессиональная чистка", noTooth: true },
+  { re: /^отбел\S*/, treatment: "Отбеливание", noTooth: true },
 ];
 
 const UNITS: Record<string, number> = {

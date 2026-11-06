@@ -1,6 +1,6 @@
 import type { ToothStatus, TreatmentStatus } from "@prisma/client";
 import { prisma } from "./db";
-import { doneToothStatus } from "./treatments";
+import { doneToothStatus, findPrice } from "./treatments";
 
 /** Зубная схема следует за планом лечения: план — единственное место, где вносится лечение */
 export async function syncToothWithPlan(patientId: string, toothNumber: number | null) {
@@ -34,4 +34,27 @@ export async function priceItemsFor(patientId: string) {
     ? await prisma.priceList.findUnique({ where: { id: p.priceListId }, include: { items: { orderBy: { sortOrder: "asc" } } } })
     : await prisma.priceList.findFirst({ where: { isDefault: true }, include: { items: { orderBy: { sortOrder: "asc" } } } });
   return { list, items: list?.items ?? [] };
+}
+
+/**
+ * Подставляет цены из прайса пациента в пункты плана, где цена ещё не указана (0).
+ * Уже назначенные цены не трогаем.
+ */
+export async function fillMissingPrices(where: { patientIds?: string[] } = {}) {
+  const items = await prisma.treatmentItem.findMany({
+    where: { price: 0, status: { not: "CANCELLED" }, ...(where.patientIds ? { patientId: { in: where.patientIds } } : {}) },
+    select: { id: true, patientId: true, treatment: true },
+  });
+  if (!items.length) return 0;
+  const cache = new Map<string, { name: string; price: number }[]>();
+  let updated = 0;
+  for (const it of items) {
+    if (!cache.has(it.patientId)) cache.set(it.patientId, (await priceItemsFor(it.patientId)).items);
+    const price = findPrice(it.treatment, cache.get(it.patientId)!);
+    if (price) {
+      await prisma.treatmentItem.update({ where: { id: it.id }, data: { price } });
+      updated++;
+    }
+  }
+  return updated;
 }

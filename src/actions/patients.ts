@@ -7,6 +7,7 @@ import { requireRole, requireUser } from "@/lib/auth";
 import { optStr, oneOf, str } from "@/lib/forms";
 import { parseISODate } from "@/lib/dates";
 import { PATIENT_SOURCE, PATIENT_STATUS, values } from "@/lib/labels";
+import { fillMissingPrices } from "@/lib/plan";
 
 function readPatient(fd: FormData) {
   return {
@@ -39,6 +40,7 @@ export async function updatePatient(id: string, formData: FormData) {
   const data = readPatient(formData);
   if (!data.firstName || !data.lastName) redirect(`/patients/${id}/edit?error=name`);
   await prisma.patient.update({ where: { id }, data });
+  await fillMissingPrices({ patientIds: [id] });
   revalidatePath("/", "layout");
   redirect(`/patients/${id}`);
 }
@@ -46,6 +48,7 @@ export async function updatePatient(id: string, formData: FormData) {
 export async function setPatientPriceList(id: string, formData: FormData) {
   await requireUser();
   await prisma.patient.update({ where: { id }, data: { priceListId: optStr(formData, "priceListId", 50) } });
+  await fillMissingPrices({ patientIds: [id] });
   revalidatePath(`/patients/${id}`);
 }
 

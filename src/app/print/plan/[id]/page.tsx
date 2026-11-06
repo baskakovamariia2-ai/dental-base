@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import type { ToothStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
+import { getSettings } from "@/lib/settings";
 import { fmtDate, money } from "@/lib/format";
 import { LOWER, UPPER, toothCategory } from "@/lib/teeth";
 import { CategoryLegend, ToothCellView } from "@/components/tooth-shape";
@@ -17,7 +18,7 @@ export default async function PrintPlanPage({ params }: { params: Promise<{ id: 
     include: { teeth: true, treatmentItems: { orderBy: [{ toothNumber: "asc" }, { sortOrder: "asc" }] } },
   });
   if (!patient) notFound();
-  const doctor = await prisma.user.findFirst({ where: { role: "DOCTOR", isActive: true }, orderBy: { createdAt: "asc" } });
+  const { doctorName } = await getSettings();
 
   // Только предстоящее лечение (выполненное и отменённое в план для пациента не попадает)
   const items = patient.treatmentItems.filter((i) => i.status === "PLANNED" || i.status === "IN_PROGRESS");
@@ -46,8 +47,9 @@ export default async function PrintPlanPage({ params }: { params: Promise<{ id: 
             <p className="mt-1 text-[15px] text-zinc-600">{patient.lastName} {patient.firstName} {patient.middleName ?? ""}</p>
           </div>
           <div className="text-right text-[13px] text-zinc-500">
-            <div>{fmtDate(new Date())}</div>
-            {doctor && <div>Врач: {doctor.name}</div>}
+            <div className="mb-2">{fmtDate(new Date())}</div>
+            <div className="text-[11px] uppercase tracking-wide text-zinc-400">Врач</div>
+            <div className="text-[14px] font-medium text-zinc-800">{doctorName}</div>
           </div>
         </header>
 

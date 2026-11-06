@@ -40,32 +40,42 @@ function cleanName(s: string) {
 export function parsePriceList(text: string): ParsedPrice[] {
   const out: ParsedPrice[] = [];
   const lines = text.split(/\n/).map((l) => l.replace(/^[\s•*·\-–—]+/, "").replace(/^\d+[.)]\s+/, "").trim());
+  const SUB = /^(\d|один|одн\S*|два|двух|две|три|тр[её]х|четыр\S*)\s*-?\s*канал/i;
+  const isTitle = (l: string) => /прайс|[\u{1F300}-\u{1FAFF}]/iu.test(l) && !extractPrice(l);
+  const ONLY_PRICE = new RegExp("^(?:от\\s*)?" + PRICE + String.raw`\s*(?:[-–—]\s*\d[\d \u00a0.]*)?\s*(?:₽|р\.?|руб\S*)?\.?$`, "i");
+  const nextNonEmpty = (i: number) => {
+    for (let j = i + 1; j < lines.length; j++) if (lines[j]) return lines[j];
+    return "";
+  };
   let header: string | null = null;
-  let pending: string | null = null; // строка без цены — возможно, цена на следующей строке
-  for (const line of lines) {
-    if (!line) {
-      pending = null;
-      continue;
-    }
-    // строка — только цена: относится к предыдущей
-    const onlyPrice = new RegExp("^(?:от\\s*)?" + PRICE + String.raw`\s*(?:[-–—]\s*\d[\d \u00a0.]*)?\s*(?:₽|р\.?|руб\S*)?\.?$`, "i").exec(line);
-    if (onlyPrice && pending) {
-      const isSub = /^\d+\s*\S/.test(pending) && header;
-      out.push({ name: cleanName(isSub ? `${header} — ${pending}` : pending), price: toNum(onlyPrice[1]) });
-      pending = null;
-      continue;
-    }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line || isTitle(line)) continue;
+    if (ONLY_PRICE.test(line)) continue; // уже учтена вместе с предыдущей строкой
     const found = extractPrice(line);
-    if (!found || /20\d\d\s*(г|год)/i.test(line) && !/₽|руб|р\./i.test(line)) {
-      // без цены: заголовок группы или название, у которого цена ниже
-      if (!/^\d+\s*(канал|зуб)/i.test(line)) header = cleanName(line.replace(/\(.*?\)/g, (x) => x));
-      pending = line;
+    const isSub = SUB.test(found ? found.rest : line);
+
+    if (!found) {
+      const next = nextNonEmpty(i);
+      // заголовок группы: дальше идут «1 канал», «2 канала»…
+      if (!isSub && SUB.test(next)) {
+        header = cleanName(line);
+        continue;
+      }
+      // цена на следующей строке
+      const op = ONLY_PRICE.exec(next);
+      const price = op ? toNum(op[1]) : 0;
+      const name = cleanName(isSub && header ? `${header} — ${line}` : line);
+      if (!isSub) header = null;
+      // строка без цены — всё равно отдельная услуга (цену можно дописать)
+      if (name) out.push({ name, price });
       continue;
     }
     let name = cleanName(found.rest);
-    if (/^\d+\s*\S/.test(name) && header) name = `${header} — ${name}`;
+    if (isSub && header) name = `${header} — ${name}`;
+    else header = null;
     if (name && found.price < 10_000_000) out.push({ name, price: found.price });
-    pending = null;
   }
   return out;
 }

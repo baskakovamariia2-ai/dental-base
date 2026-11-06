@@ -3,8 +3,9 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { logout, changePassword } from "@/actions/auth";
 import { addUser, clearDemo, seedDemo, toggleUserActive } from "@/actions/admin";
-import { saveReminderTemplate } from "@/actions/settings";
+import { saveReminderTemplate, saveSettings } from "@/actions/settings";
 import { getReminderTemplate } from "@/lib/reminder";
+import { getSettings } from "@/lib/settings";
 import { ConfirmButton } from "@/components/auto-submit";
 import { Field, PageHeader } from "@/components/ui";
 import { IconChart, IconChevron, IconLogout, IconSearch, IconTag, IconUsers } from "@/components/icons";
@@ -26,6 +27,7 @@ export default async function MorePage({ searchParams }: { searchParams: Promise
   const sp = await searchParams;
   const isOwner = me.role === "OWNER";
   const tpl = await getReminderTemplate();
+  const settings = await getSettings();
   const [users, demoCount] = await Promise.all([
     isOwner ? prisma.user.findMany({ orderBy: { createdAt: "asc" } }) : Promise.resolve([]),
     prisma.patient.count({ where: { isDemo: true } }),
@@ -34,6 +36,7 @@ export default async function MorePage({ searchParams }: { searchParams: Promise
   const links = [
     { href: "/search", label: "Поиск", Icon: IconSearch },
     { href: "/prices", label: "Прайсы", Icon: IconTag },
+    { href: "/earnings", label: "Заработок", Icon: IconChart },
     { href: "/stats", label: "Статистика", Icon: IconChart },
     { href: "/patients?filter=archived", label: "Архив пациентов", Icon: IconUsers },
   ];
@@ -98,10 +101,19 @@ export default async function MorePage({ searchParams }: { searchParams: Promise
       )}
 
       <section>
+        <h2 className="section-title">Врач в плане лечения</h2>
+        <form action={saveSettings} className="card card-pad flex flex-wrap items-end gap-2">
+          <input type="hidden" name="returnTo" value="/more?tpl=ok" />
+          <label className="block min-w-0 flex-1"><span className="label">ФИО врача</span><input name="doctorName" defaultValue={settings.doctorName} className="input" /></label>
+          <button className="btn-secondary">Сохранить</button>
+        </form>
+      </section>
+
+      <section>
         <h2 className="section-title">Напоминание в Telegram</h2>
-        {sp.tpl && <p className="mb-3 rounded-xl bg-emerald-50 px-3 py-2.5 text-sm text-emerald-700">Шаблон сохранён</p>}
+        {sp.tpl && <p className="mb-3 rounded-xl bg-emerald-50 px-3 py-2.5 text-sm text-emerald-700">Сохранено</p>}
         <form action={saveReminderTemplate} className="card card-pad space-y-3">
-          <p className="text-sm text-ink-soft">Этот текст копируется кнопкой «Напомнить в Telegram». Вместо <b>{"{дата}"}</b> подставятся дата и время ближайшей записи, например «5 ноября (среда) в 14:00».</p>
+          <p className="text-sm text-ink-soft">Этот текст показывается по кнопке «Напомнить» — его можно скопировать и вставить в чат. Вместо <b>{"{дата}"}</b> подставятся дата и время ближайшей записи, например «5 ноября (среда) в 14:00».</p>
           <textarea name="template" rows={14} defaultValue={tpl} className="input text-[15px]" />
           <div className="flex flex-wrap gap-2">
             <button className="btn-primary">Сохранить</button>

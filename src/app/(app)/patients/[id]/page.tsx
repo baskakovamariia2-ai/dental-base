@@ -4,6 +4,8 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { patientStats, ALL_TEETH } from "@/lib/teeth";
 import { getReminderTemplate, reminderText } from "@/lib/reminder";
+import { fillMissingPrices } from "@/lib/plan";
+import { getSettings } from "@/lib/settings";
 import { ReminderButton } from "@/components/reminder-button";
 import { fileSize, fmtDate, fmtDateTime, fullName, initials, money, phoneHref, telegramHref } from "@/lib/format";
 import { toISODate } from "@/lib/dates";
@@ -39,6 +41,8 @@ export default async function PatientPage({
   const { id } = await params;
   const { tab = "overview" } = await searchParams;
   const now = new Date();
+  // цены из прайса подставляются в план автоматически (где цена ещё не указана)
+  await fillMissingPrices({ patientIds: [id] });
 
   const patient = await prisma.patient.findUnique({
     where: { id },
@@ -60,7 +64,7 @@ export default async function PatientPage({
   const priceLists = await prisma.priceList.findMany({ orderBy: { createdAt: "asc" }, include: { items: { orderBy: { sortOrder: "asc" } } } });
   const effectiveList = patient.priceList ?? priceLists.find((l) => l.isDefault) ?? null;
   const priceOptions: PriceOption[] = (effectiveList?.items ?? []).map((i) => ({ name: i.name, price: i.price }));
-  const tpl = await getReminderTemplate();
+  const [tpl, settings] = await Promise.all([getReminderTemplate(), getSettings()]);
 
   const stats = patientStats(patient.teeth, patient.treatmentItems);
   const st = findOpt(PATIENT_STATUS, patient.status);
@@ -216,9 +220,13 @@ export default async function PatientPage({
 
       {tab === "plan" && (
         <div className="space-y-4">
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Link href={`/print/plan/${patient.id}`} target="_blank" className="btn-primary">📄 PDF для пациента</Link>
             <Link href={`/patients/${patient.id}?tab=treatment`} className="btn-secondary">🎙 Надиктовать</Link>
+            <div className="ml-auto text-right">
+              <div className="text-[11px] uppercase tracking-wide text-ink-mute">Врач</div>
+              <div className="text-sm font-medium">{settings.doctorName}</div>
+            </div>
           </div>
           {planItems.length === 0 ? (
             <Empty>План пуст. Надиктуйте формулу на вкладке «Лечение» или добавьте пункт ниже.</Empty>

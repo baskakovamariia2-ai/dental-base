@@ -36,7 +36,7 @@ export function AppointmentRow({ a, returnTo, showDate, reminderTemplate }: { a:
             <AutoSubmitSelect name="status" defaultValue={a.status} options={APPOINTMENT_STATUS} ariaLabel="Статус записи" />
           </form>
           {!cancelled && a.status !== "DONE" && (
-            <ReminderButton appointmentId={a.id} text={reminderText(reminderTemplate, a.startsAt)} telegram={telegramHref(a.patient)} sent={a.reminderSent} />
+            <ReminderButton appointmentId={a.id} text={reminderText(reminderTemplate, a.startsAt)} telegram={telegramHref(a.patient)} sent={a.reminderSent} label="Напомнить в Telegram" />
           )}
           <Link href={`/schedule/${a.id}`} className="rounded-lg px-2 py-1.5 text-xs text-ink-mute hover:bg-zinc-100">
             Изменить

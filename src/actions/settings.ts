@@ -14,3 +14,18 @@ export async function saveReminderTemplate(formData: FormData) {
   revalidatePath("/", "layout");
   redirect("/more?tpl=ok");
 }
+
+const KEYS = ["doctorName", "rentPerDay", "sterilizationPerDay"] as const;
+
+export async function saveSettings(formData: FormData) {
+  await requireUser();
+  for (const key of KEYS) {
+    if (!formData.has(key)) continue;
+    let value = str(formData, key, 200);
+    if (key !== "doctorName") value = String(Math.max(0, Math.round(Number(value.replace(/\s/g, "")) || 0)));
+    await prisma.setting.upsert({ where: { key }, create: { key, value }, update: { value } });
+  }
+  revalidatePath("/", "layout");
+  const back = str(formData, "returnTo");
+  redirect(back.startsWith("/") && !back.startsWith("//") ? back : "/more?tpl=ok");
+}

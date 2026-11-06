@@ -7,9 +7,12 @@ export const TREATMENT_TYPES = [
   "Пульпит — 3 канала",
   "Пульпит — 4 канала",
   "Периодонтит",
-  "Коронка",
+  "Коронка цирконий",
+  "Коронка стеклокерамика",
   "Имплант",
   "Зуб под удаление",
+  "Профессиональная чистка",
+  "Отбеливание",
 ];
 
 export function canalLabel(n: number) {
@@ -17,15 +20,18 @@ export function canalLabel(n: number) {
 }
 
 /** Число каналов из названия: «Пульпит — 3 канала» → 3 */
+const CANAL_NUM: Record<string, number> = { один: 1, одного: 1, одним: 1, два: 2, двух: 2, три: 3, трех: 3, трёх: 3, четыре: 4, четырех: 4, четырёх: 4 };
+
 export function canalCount(name: string): number | null {
-  const m = /(\d)\s*канал/i.exec(name);
-  return m ? Number(m[1]) : null;
+  const m = /(\d|один|одного|одним|два|двух|три|тр[её]х|четыре|четыр[её]х)\s*-?\s*канал/i.exec(name);
+  if (!m) return null;
+  return /^\d$/.test(m[1]) ? Number(m[1]) : CANAL_NUM[m[1].toLowerCase()] ?? null;
 }
 
 /** Подбор цены по прайсу пациента */
 export function findPrice(treatment: string, items: { name: string; price: number }[]): number | null {
   const t = treatment.toLowerCase();
-  const low = items.map((i) => ({ ...i, n: i.name.toLowerCase() }));
+  const low = items.filter((i) => i.price > 0).map((i) => ({ ...i, n: i.name.toLowerCase() }));
   const exact = low.find((i) => i.n === t);
   if (exact) return exact.price;
 
@@ -39,6 +45,8 @@ export function findPrice(treatment: string, items: { name: string; price: numbe
   }
   const rules: [RegExp, RegExp, RegExp?][] = [
     [/реставрац|кариес|пломб/, /реставрац|кариес|пломб/],
+    [/циркон/, /циркон/],
+    [/керамик/, /керамик/],
     [/коронк/, /^коронка$/, /коронк/],
     [/имплант/, /имплант/],
     [/удален/, /удален/],

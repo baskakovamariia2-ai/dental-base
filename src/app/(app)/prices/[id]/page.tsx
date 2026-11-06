@@ -1,15 +1,15 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
-import { money } from "@/lib/format";
-import { deletePriceList, makeDefaultPriceList, updatePriceList } from "@/actions/pricelists";
+import { addPriceItem, deletePriceItem, deletePriceList, makeDefaultPriceList, updatePriceItem, updatePriceList } from "@/actions/pricelists";
 import { ConfirmButton } from "@/components/auto-submit";
 import { Empty, PageHeader } from "@/components/ui";
 import { PriceListFields } from "../price-form";
 
-export default async function PriceListPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function PriceListPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string }> }) {
   await requireUser();
   const { id } = await params;
+  const { saved } = await searchParams;
   const list = await prisma.priceList.findUnique({
     where: { id },
     include: { items: { orderBy: { sortOrder: "asc" } }, _count: { select: { patients: true } } },
@@ -26,24 +26,41 @@ export default async function PriceListPage({ params }: { params: Promise<{ id: 
         </form>
       )}
 
+      {saved && <p className="rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700">Сохранено. Цены подставлены в планы пациентов, где цена ещё не была указана.</p>}
+
       <section>
-        <h2 className="section-title">Распознанные услуги · {list.items.length}</h2>
+        <h2 className="section-title">Услуги · {list.items.length}</h2>
         {list.items.length === 0 ? (
-          <Empty>Цены не распознаны. Проверьте, что цена стоит в конце строки.</Empty>
+          <Empty>Услуг пока нет. Вставьте текст прайса ниже или добавьте услугу вручную.</Empty>
         ) : (
           <div className="card divide-y divide-zinc-100">
             {list.items.map((i) => (
-              <div key={i.id} className="flex justify-between gap-3 px-4 py-2.5 text-[15px]">
-                <span>{i.name}</span>
-                <span className="shrink-0 font-medium tabular-nums">{money(i.price)}</span>
-              </div>
+              <form key={i.id} action={updatePriceItem.bind(null, i.id)} className="flex items-center gap-2 px-3 py-2">
+                <input name="name" defaultValue={i.name} className="input min-h-[40px] flex-1 border-0 bg-transparent px-1 py-1.5 ring-0 focus:bg-zinc-50" aria-label="Услуга" />
+                <input
+                  name="price"
+                  inputMode="numeric"
+                  defaultValue={i.price || ""}
+                  placeholder="цена"
+                  className={`input min-h-[40px] w-24 py-1.5 text-right ${i.price ? "" : "ring-orange-300"}`}
+                  aria-label="Цена"
+                />
+                <button className="btn-secondary btn-sm h-10">OK</button>
+                <button formAction={deletePriceItem.bind(null, i.id)} className="px-1 text-ink-mute hover:text-rose-600" aria-label="Удалить">✕</button>
+              </form>
             ))}
           </div>
         )}
+        <form action={addPriceItem.bind(null, list.id)} className="card mt-2 flex items-center gap-2 p-2.5">
+          <input name="name" placeholder="Новая услуга" className="input min-h-[40px] flex-1 py-1.5" required />
+          <input name="price" inputMode="numeric" placeholder="цена" className="input min-h-[40px] w-24 py-1.5 text-right" />
+          <button className="btn-primary btn-sm h-10">+</button>
+        </form>
+        <p className="mt-2 px-1 text-xs text-ink-mute">Цену можно поправить прямо в строке и нажать OK. Пустая цена подсвечена оранжевым.</p>
       </section>
 
       <form action={updatePriceList.bind(null, list.id)} className="space-y-4">
-        <h2 className="section-title">Изменить</h2>
+        <h2 className="section-title">Текст прайса</h2>
         <PriceListFields list={list} />
         <button className="btn-primary w-full sm:w-auto">Сохранить</button>
       </form>

@@ -6,7 +6,7 @@ import { requireUser } from "@/lib/auth";
 import { int, optInt, optStr, oneOf, str } from "@/lib/forms";
 import { TREATMENT_STATUS, values } from "@/lib/labels";
 import { isValidTooth } from "@/lib/teeth";
-import { syncToothWithPlan } from "@/lib/plan";
+import { fillMissingPrices, syncToothWithPlan } from "@/lib/plan";
 
 function refresh(patientId: string) {
   revalidatePath(`/patients/${patientId}`);
@@ -33,6 +33,7 @@ export async function addTreatmentItem(patientId: string, formData: FormData) {
     },
   });
   await syncToothWithPlan(patientId, tooth);
+  await fillMissingPrices({ patientIds: [patientId] });
   refresh(patientId);
 }
 

@@ -2,6 +2,8 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { getReminderTemplate } from "@/lib/reminder";
+import { earningsByDay } from "@/lib/earnings";
+import { money } from "@/lib/format";
 import { addDays, addMonths, parseISODate, sameDay, startOfDay, startOfMonth, startOfWeek, toISODate } from "@/lib/dates";
 import { fmtDateLong, fmtTime, fullName } from "@/lib/format";
 import { APPOINTMENT_STATUS, findOpt } from "@/lib/labels";
@@ -43,6 +45,9 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   });
 
   const tpl = await getReminderTemplate();
+  const earnDay = view === "day" ? date : today;
+  const [earn] = await earningsByDay(earnDay, addDays(earnDay, 1));
+  const earnTitle = sameDay(earnDay, today) ? "Заработано сегодня" : `Заработано ${earnDay.toLocaleDateString("ru-RU", { day: "numeric", month: "long" })}`;
   const link = (v: View, d: Date) => (v === "upcoming" ? "/schedule" : `/schedule?view=${v}&date=${toISODate(d)}`);
   const returnTo = link(view, date);
 
@@ -52,6 +57,21 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
         title="Расписание"
         action={<Link href={`/schedule/new?date=${toISODate(view === "day" ? date : today)}`} className="btn-accent"><IconPlus /> <span className="hidden sm:inline">Новая запись</span></Link>}
       />
+
+      <Link href="/earnings" className="card mb-4 flex items-center gap-3 px-4 py-3 hover:ring-accent/30">
+        <span className="min-w-0 flex-1">
+          <span className="block text-[13px] text-ink-soft">{earnTitle}</span>
+          <span className="block text-xl font-semibold tabular-nums">{money(earn?.revenue ?? 0)}</span>
+        </span>
+        {earn && (
+          <span className="text-right text-xs text-ink-mute">
+            минус аренда и стерилизация {money(earn.rent + earn.sterilization)}
+            <span className={`block text-[15px] font-semibold tabular-nums ${earn.net < 0 ? "text-rose-600" : "text-emerald-700"}`}>
+              чистыми {money(earn.net)}
+            </span>
+          </span>
+        )}
+      </Link>
 
       <div className="mb-4 flex rounded-xl bg-zinc-200/60 p-1">
         {(["upcoming", "day", "week", "month"] as View[]).map((v) => (
