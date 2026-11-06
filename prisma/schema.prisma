@@ -87,6 +87,7 @@ model Patient {
   treatmentItems TreatmentItem[]
   prices         PatientPrice[]
   files          PatientFile[]
+  ctNotes        CtNote[]
 
   @@index([lastName, firstName])
   @@index([phone])
@@ -284,6 +285,25 @@ model PatientFile {
   mimeType    String?
   sizeBytes   BigInt?
   createdAt   DateTime     @default(now())
+  ctNotes     CtNote[]
+
+  @@index([patientId])
+}
+
+// ───────────── КТ: подсказка ИИ (черновик, НЕ диагноз) + заключение врача ─────────────
+
+model CtNote {
+  id          String      @id @default(cuid())
+  patientId   String
+  patient     Patient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  fileId      String // маленькая картинка (срез КТ) — хранится как PatientFile
+  file        PatientFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  toothNumber Int? // пусто — снимок целиком / несколько зубов
+  aiText      String? // черновик ИИ — только подсказка врачу
+  aiError     String?
+  doctorText  String? // заключение врача — это и есть диагноз
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
 
   @@index([patientId])
 }

@@ -17,6 +17,9 @@ import { AutoSubmitSelect, ConfirmButton } from "@/components/auto-submit";
 import { Odontogram, type PriceOption } from "@/components/odontogram";
 import { DictationBox } from "@/components/dictation";
 import { FileUpload } from "@/components/file-upload";
+import { CtUpload, PendingButton } from "@/components/ct-upload";
+import { deleteCtNote, retryCtNote, saveCtConclusion } from "@/actions/ct";
+import { getGigachatKey } from "@/lib/gigachat";
 import { TreatmentFields } from "@/components/price-picker";
 import { Badge, Empty, Field, Stat } from "@/components/ui";
 import { IconBack, IconCalendar, IconPhone, IconPlus, IconTooth } from "@/components/icons";
@@ -26,6 +29,7 @@ const TABS = [
   { key: "treatment", label: "Лечение" },
   { key: "plan", label: "План" },
   { key: "history", label: "История" },
+  { key: "ct", label: "КТ" },
   { key: "files", label: "Файлы" },
   { key: "prices", label: "Прайс" },
 ];
@@ -52,6 +56,7 @@ export default async function PatientPage({
       priceList: { include: { items: { orderBy: { sortOrder: "asc" } } } },
       visits: { orderBy: { date: "desc" }, include: { doctor: true } },
       files: { orderBy: [{ date: "desc" }, { createdAt: "desc" }] },
+      ctNotes: { orderBy: { createdAt: "desc" } },
       appointments: {
         where: { startsAt: { gte: now }, status: { notIn: ["CANCELLED", "NO_SHOW", "DONE"] } },
         orderBy: { startsAt: "asc" },
@@ -64,7 +69,7 @@ export default async function PatientPage({
   const priceLists = await prisma.priceList.findMany({ orderBy: { createdAt: "asc" }, include: { items: { orderBy: { sortOrder: "asc" } } } });
   const effectiveList = patient.priceList ?? priceLists.find((l) => l.isDefault) ?? null;
   const priceOptions: PriceOption[] = (effectiveList?.items ?? []).map((i) => ({ name: i.name, price: i.price }));
-  const [tpl, settings] = await Promise.all([getReminderTemplate(), getSettings()]);
+  const [tpl, settings, aiKey] = await Promise.all([getReminderTemplate(), getSettings(), getGigachatKey()]);
 
   const stats = patientStats(patient.teeth, patient.treatmentItems);
   const st = findOpt(PATIENT_STATUS, patient.status);
@@ -78,8 +83,9 @@ export default async function PatientPage({
   const planPaid = planItems.reduce((s, i) => s + i.paid, 0);
   const openItems = planItems.filter((i) => i.status === "PLANNED" || i.status === "IN_PROGRESS").length;
 
-  const photos = patient.files.filter((f) => f.storageKey && (f.mimeType?.startsWith("image/") ?? false));
-  const docs = patient.files.filter((f) => f.storageKey && !(f.mimeType?.startsWith("image/") ?? false));
+  // срезы КТ показываются на вкладке «КТ», а не среди фото
+  const photos = patient.files.filter((f) => f.storageKey && f.category !== "CT" && (f.mimeType?.startsWith("image/") ?? false));
+  const docs = patient.files.filter((f) => f.storageKey && f.category !== "CT" && !(f.mimeType?.startsWith("image/") ?? false));
   const links = patient.files.filter((f) => !f.storageKey && f.url);
 
   return (
@@ -138,6 +144,7 @@ export default async function PatientPage({
           >
             {t.label}
             {t.key === "plan" && openItems > 0 && <span className="ml-1 text-xs text-orange-600">{openItems}</span>}
+            {t.key === "ct" && patient.ctNotes.length > 0 && <span className="ml-1 text-xs text-ink-mute">{patient.ctNotes.length}</span>}
             {t.key === "files" && patient.files.length > 0 && <span className="ml-1 text-xs text-ink-mute">{patient.files.length}</span>}
           </Link>
         ))}
@@ -328,6 +335,82 @@ export default async function PatientPage({
               </dl>
             </article>
           ))}
+        </div>
+      )}
+
+      {tab === "ct" && (
+        <div className="space-y-4">
+          <CtUpload patientId={patient.id} hasKey={!!aiKey} />
+          {links.length > 0 && (
+            <p className="px-1 text-sm text-ink-soft">
+              КТ пациента в Telegram:{" "}
+              {links.map((f, i) => (
+                <span key={f.id}>{i > 0 && ", "}<a href={f.url!} target="_blank" rel="noopener noreferrer" className="text-[#229ED9]">{f.title}</a></span>
+              ))}
+            </p>
+          )}
+          {patient.ctNotes.length === 0 && <Empty>Разборов КТ пока нет</Empty>}
+          {patient.ctNotes.map((n) => (
+            <article key={n.id} className="card card-pad">
+              <div className="flex gap-3">
+                <a href={`/api/files/${n.fileId}`} target="_blank" rel="noopener noreferrer" className="shrink-0">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={`/api/files/${n.fileId}`} alt="Срез КТ" loading="lazy" className="h-24 w-24 rounded-xl bg-zinc-100 object-cover sm:h-28 sm:w-28" />
+                </a>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="text-[17px] font-semibold">{n.toothNumber ? `Зуб ${n.toothNumber}` : "Весь снимок"}</div>
+                      <div className="text-xs text-ink-mute">{fmtDateTime(n.createdAt)}</div>
+                    </div>
+                    <form action={deleteCtNote.bind(null, n.id)}>
+                      <ConfirmButton message="Удалить разбор и картинку?" className="px-2 text-ink-mute hover:text-rose-600">✕</ConfirmButton>
+                    </form>
+                  </div>
+                  {n.doctorText && (
+                    <div className="mt-2 rounded-xl bg-emerald-50 px-3 py-2 text-[15px] text-emerald-900">
+                      <div className="text-[11px] font-medium uppercase tracking-wide text-emerald-700">Заключение врача</div>
+                      <p className="whitespace-pre-wrap">{n.doctorText}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-3 rounded-xl bg-zinc-50 px-3 py-2.5">
+                <div className="text-[11px] font-medium uppercase tracking-wide text-ink-mute">🤖 Подсказка ИИ · черновик, не диагноз</div>
+                {n.aiText ? (
+                  <p className="mt-1 whitespace-pre-wrap text-[15px] text-ink-soft">{n.aiText}</p>
+                ) : n.aiError ? (
+                  <p className="mt-1 text-sm text-rose-600">{n.aiError}</p>
+                ) : (
+                  <p className="mt-1 text-sm text-ink-mute">Ответа ещё нет.</p>
+                )}
+                {!n.aiText && (
+                  <form action={retryCtNote.bind(null, n.id)} className="mt-2">
+                    <PendingButton pendingText="ИИ смотрит…" className="btn-secondary btn-sm">Повторить</PendingButton>
+                  </form>
+                )}
+              </div>
+
+              <details className="mt-3" open={!n.doctorText && !!n.aiText}>
+                <summary className="cursor-pointer list-none text-sm font-medium text-accent">{n.doctorText ? "Изменить заключение" : "Написать заключение врача"}</summary>
+                <form action={saveCtConclusion.bind(null, n.id)} className="mt-2 space-y-2">
+                  <textarea name="doctorText" rows={3} defaultValue={n.doctorText ?? ""} placeholder="Что видит врач (это и будет диагноз)" className="input text-[15px]" />
+                  {n.toothNumber && (
+                    <label className="flex items-center gap-2 text-sm text-ink-soft">
+                      <input type="checkbox" name="toTooth" value="1" defaultChecked className="h-5 w-5" />
+                      Записать в карту зуба {n.toothNumber}
+                    </label>
+                  )}
+                  <button className="btn-primary btn-sm">Сохранить</button>
+                </form>
+              </details>
+            </article>
+          ))}
+          <p className="px-1 text-xs text-ink-mute">
+            ИИ (ГигаЧат) получает только картинку и номер зуба — без имени пациента. Его ответ может быть неточным: врач всегда проверяет снимок сам.
+            Пациенту показывается только заключение врача.
+          </p>
         </div>
       )}
 
