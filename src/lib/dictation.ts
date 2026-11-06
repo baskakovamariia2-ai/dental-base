@@ -52,6 +52,7 @@ function normalize(text: string) {
   return text
     .toLowerCase()
     .replace(/ё/g, "е")
+    .replace(/(\d+)\s*-?\s*(?:го|ого|ый|ой|й|м|ом|х)(?=\s|$)/g, "$1") // «15-го», «3-х» → «15», «3»
     .replace(/(\d)\s*[-–—.]\s*(\d)/g, "$1 $2") // «3-6» → «3 6»
     .replace(/[,;:!?()«»"]/g, " ")
     .replace(/\s+/g, " ")
@@ -112,9 +113,9 @@ function tokenize(text: string): Tok[] {
 type KwTok = { kw: Kw; treatment: string | null };
 type Run = { kind: "teeth"; teeth: number[] } | { kind: "kws"; kws: KwTok[] };
 
-export function parseDictation(text: string): DictatedItem[] {
+function pairTokens(toks: Tok[]): DictatedItem[] {
   const runs: Run[] = [];
-  for (const t of tokenize(text)) {
+  for (const t of toks) {
     const last = runs[runs.length - 1];
     if (t.kind === "tooth") {
       if (last?.kind === "teeth") last.teeth.push(t.n);
@@ -129,7 +130,7 @@ export function parseDictation(text: string): DictatedItem[] {
   const out: DictatedItem[] = [];
 
   const emit = (teeth: number[], kws: KwTok[]) => {
-    // «пульпит» и «реставрация» подряд — оставляем более серьёзное лечение
+    // «пульпит» и «реставрация» вместе — оставляем более серьёзное лечение
     let treatments = [...new Set(kws.filter((k) => k.treatment && !k.kw.noTooth).map((k) => k.treatment!))];
     if (treatments.some((t) => /пульпит|периодонт/i.test(t))) treatments = treatments.filter((t) => !/реставрац/i.test(t));
     const statusKw = kws.find((k) => k.kw.noPlan && k.kw.status) ?? kws.find((k) => k.kw.status);
@@ -152,6 +153,52 @@ export function parseDictation(text: string): DictatedItem[] {
     emit(r.teeth, kwRun.kws.filter((k) => !k.kw.noTooth));
   });
   return out;
+}
+
+/**
+ * Понимает разный порядок слов:
+ * «15 кариес», «кариес 15 зуба», «36 и 37 контактный кариес», «пульпит 26 зуба 3 канала»,
+ * несколько фраз через запятую/точку или «потом», «а также».
+ */
+export function parseDictation(text: string): DictatedItem[] {
+  // «пульпит 26 зуба 3 канала» → «26 пульпит 3 канала»
+  const prepared = text.replace(/(пульпит\S*|периодонтит\S*)\s+(\d{2})(?:\s*-?\s*(?:го|й))?\s+зуб\S*\s+(\S+\s+канал\S*)/gi, "$2 $1 $3");
+  const segments = prepared
+    .split(/[.;,!?\n]+|\s(?:а\s+также|также|далее|потом|затем|ещ[её])\s/i)
+    .map((seg) => tokenize(seg))
+    .filter((t) => t.length);
+
+  const out: DictatedItem[] = [];
+  let pendingTeeth: Tok[] = [];
+  for (const toks of segments) {
+    const hasTeeth = toks.some((t) => t.kind === "tooth");
+    const hasToothKw = toks.some((t) => t.kind === "kw" && !t.kw.noTooth);
+    if (hasTeeth && !hasToothKw) {
+      // «36, 37, контактный кариес» — номера отдельно от диагноза
+      pendingTeeth = [...pendingTeeth, ...toks];
+      continue;
+    }
+    if (!hasTeeth && hasToothKw && pendingTeeth.length) {
+      out.push(...pairTokens([...pendingTeeth, ...toks]));
+      pendingTeeth = [];
+      continue;
+    }
+    if (pendingTeeth.length && hasTeeth) {
+      out.push(...pairTokens([...pendingTeeth, ...toks]));
+      pendingTeeth = [];
+      continue;
+    }
+    out.push(...pairTokens(toks));
+  }
+  // одни номера в конце без диагноза — пропускаем
+  // убираем точные дубли
+  const seen = new Set<string>();
+  return out.filter((i) => {
+    const k = `${i.tooth}|${i.treatment}|${i.status}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
 }
 
 export { findPrice } from "./treatments";

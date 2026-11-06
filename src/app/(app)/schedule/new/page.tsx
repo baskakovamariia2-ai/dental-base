@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
+import { priceItemsFor } from "@/lib/plan";
 import { getDoctors } from "@/lib/doctors";
 import { parseISODate } from "@/lib/dates";
 import { fullName } from "@/lib/format";
@@ -32,6 +33,15 @@ export default async function NewAppointmentPage({
     getDoctors(),
   ]);
   if (!patient) notFound();
+  const [{ items: priceItems }, openPlan] = await Promise.all([
+    priceItemsFor(patient.id),
+    prisma.treatmentItem.findMany({
+      where: { patientId: patient.id, status: { in: ["PLANNED", "IN_PROGRESS"] } },
+      orderBy: [{ toothNumber: "asc" }, { sortOrder: "asc" }],
+    }),
+  ]);
+  const prices = priceItems.map((i) => ({ name: i.name, price: i.price }));
+  const plan = openPlan.map((i) => ({ id: i.id, toothNumber: i.toothNumber, treatment: i.treatment, price: i.price }));
 
   const start = parseISODate(date) ?? new Date();
   if (date) start.setHours(10, 0, 0, 0);
@@ -46,7 +56,7 @@ export default async function NewAppointmentPage({
       <ErrorNote show={!!error}>Укажите дату, время и процедуру</ErrorNote>
       <form action={createAppointment} className="space-y-4">
         <input type="hidden" name="patientId" value={patient.id} />
-        <AppointmentFields doctors={doctors} defaultDoctorId={doctors[0]?.id ?? user.id} defaultStart={start} />
+        <AppointmentFields doctors={doctors} defaultDoctorId={doctors[0]?.id ?? user.id} defaultStart={start} prices={prices} plan={plan} />
         <button className="btn-primary w-full sm:w-auto">Записать</button>
       </form>
     </div>

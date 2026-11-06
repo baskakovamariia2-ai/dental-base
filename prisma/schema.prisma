@@ -114,6 +114,10 @@ model Appointment {
   startsAt     DateTime
   durationMin  Int               @default(60)
   procedure    String
+  price        Int? // цена процедуры (из прайса пациента, можно изменить)
+  toothNumber  Int?
+  treatmentItemId String? // пункт плана, который выполняется на этой записи
+  visitId      String? // приём, созданный при завершении (чтобы не задвоить)
   status       AppointmentStatus @default(SCHEDULED)
   reminderSent Boolean           @default(false)
   comment      String?

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
+import { priceItemsFor } from "@/lib/plan";
 import { getReminderTemplate, reminderText } from "@/lib/reminder";
 import { ReminderButton } from "@/components/reminder-button";
 import { getDoctors } from "@/lib/doctors";
@@ -26,6 +27,15 @@ export default async function EditAppointmentPage({
     getDoctors(),
   ]);
   if (!ap) notFound();
+  const [{ items: priceItems }, openPlan] = await Promise.all([
+    priceItemsFor(ap.patientId),
+    prisma.treatmentItem.findMany({
+      where: { patientId: ap.patientId, OR: [{ status: { in: ["PLANNED", "IN_PROGRESS"] } }, ...(ap.treatmentItemId ? [{ id: ap.treatmentItemId }] : [])] },
+      orderBy: [{ toothNumber: "asc" }, { sortOrder: "asc" }],
+    }),
+  ]);
+  const prices = priceItems.map((i) => ({ name: i.name, price: i.price }));
+  const plan = openPlan.map((i) => ({ id: i.id, toothNumber: i.toothNumber, treatment: i.treatment, price: i.price }));
   const tpl = await getReminderTemplate();
 
   return (
@@ -49,7 +59,7 @@ export default async function EditAppointmentPage({
       </div>
 
       <form action={updateAppointment.bind(null, ap.id)} className="space-y-4">
-        <AppointmentFields ap={ap} doctors={doctors} defaultDoctorId={doctors[0]?.id ?? user.id} defaultStart={ap.startsAt} />
+        <AppointmentFields ap={ap} doctors={doctors} defaultDoctorId={doctors[0]?.id ?? user.id} defaultStart={ap.startsAt} prices={prices} plan={plan} />
         <button className="btn-primary w-full sm:w-auto">Сохранить</button>
       </form>
       <form action={deleteAppointment.bind(null, ap.id)} className="mt-8">

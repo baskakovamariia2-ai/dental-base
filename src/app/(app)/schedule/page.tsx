@@ -2,6 +2,8 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { getReminderTemplate } from "@/lib/reminder";
+import { completeDay } from "@/actions/appointments";
+import { ConfirmButton } from "@/components/auto-submit";
 import { earningsByDay } from "@/lib/earnings";
 import { money } from "@/lib/format";
 import { addDays, addMonths, parseISODate, sameDay, startOfDay, startOfMonth, startOfWeek, toISODate } from "@/lib/dates";
@@ -106,6 +108,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
                     {sameDay(dd, today) ? "Сегодня, " : ""}{fmtDateLong(dd)} · {list.length}
                   </Link>
                   <div className="card divide-y divide-zinc-100">{list.map((a) => <AppointmentRow key={a.id} a={a} returnTo="/schedule" reminderTemplate={tpl} />)}</div>
+                  {sameDay(dd, today) && <CompleteDayButton date={d} count={list.filter((a) => !["CANCELLED", "NO_SHOW", "DONE"].includes(a.status)).length} />}
                 </section>
               );
             })}
@@ -116,7 +119,10 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
         (aps.length === 0 ? (
           <Empty>Записей нет. <Link className="text-accent" href={`/schedule/new?date=${toISODate(date)}`}>Добавить запись</Link></Empty>
         ) : (
-          <div className="card divide-y divide-zinc-100">{aps.map((a) => <AppointmentRow key={a.id} a={a} returnTo={returnTo} reminderTemplate={tpl} />)}</div>
+          <>
+            <div className="card divide-y divide-zinc-100">{aps.map((a) => <AppointmentRow key={a.id} a={a} returnTo={returnTo} reminderTemplate={tpl} />)}</div>
+            {date <= today && <CompleteDayButton date={toISODate(date)} count={aps.filter((a) => !["CANCELLED", "NO_SHOW", "DONE"].includes(a.status)).length} />}
+          </>
         ))}
 
       {view === "week" && (
@@ -183,5 +189,19 @@ function Compact({ a }: { a: AppointmentWith }) {
       <div className="truncate text-sm">{fullName(a.patient)}</div>
       <div className="truncate text-xs text-ink-mute">{a.procedure}</div>
     </Link>
+  );
+}
+
+function CompleteDayButton({ date, count }: { date: string; count: number }) {
+  if (!count) return null;
+  return (
+    <form action={completeDay.bind(null, date)} className="mt-2">
+      <ConfirmButton
+        message={`Завершить день? ${count} зап. отметятся выполненными, процедуры попадут в план как выполненные и оплаченные, суммы — в заработок.`}
+        className="btn-primary w-full"
+      >
+        ✓ Завершить день ({count})
+      </ConfirmButton>
+    </form>
   );
 }

@@ -17,6 +17,9 @@ export async function syncToothWithPlan(patientId: string, toothNumber: number |
   } else if (items.length && items.every((i) => i.status === "DONE")) {
     const last = items[items.length - 1];
     next = doneToothStatus(last.treatment);
+  } else if (!items.length && (current === "PLANNED" || current === "IN_TREATMENT")) {
+    // лечение из плана удалили — зуб больше не отмечен как проблемный
+    next = "HEALTHY";
   }
   if (next !== current || !tooth) {
     await prisma.tooth.upsert({

@@ -9,6 +9,7 @@ import { CategoryLegend, ToothCellView } from "@/components/tooth-shape";
 import { PrintButton } from "@/components/print-button";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export default async function PrintPlanPage({ params }: { params: Promise<{ id: string }> }) {
   await requireUser();

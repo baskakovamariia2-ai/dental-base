@@ -124,7 +124,6 @@ export default async function PatientPage({
           />
         )}
         <Link href={`/schedule/new?patient=${patient.id}`} className="btn-accent shrink-0"><IconCalendar /> Записать на приём</Link>
-        <Link href={`/visits/new?patient=${patient.id}`} className="btn-secondary shrink-0"><IconTooth /> Добавить приём</Link>
         {patient.phone && <a href={phoneHref(patient.phone)} className="btn-secondary shrink-0"><IconPhone /> Позвонить</a>}
         <Link href={`/patients/${patient.id}/edit`} className="btn-secondary shrink-0">Изменить</Link>
       </div>
@@ -221,7 +220,7 @@ export default async function PatientPage({
       {tab === "plan" && (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-2">
-            <Link href={`/print/plan/${patient.id}`} target="_blank" className="btn-primary">📄 PDF для пациента</Link>
+            <a href={`/print/plan/${patient.id}?v=${Date.now()}`} target="_blank" rel="noopener" className="btn-primary">📄 PDF для пациента</a>
             <Link href={`/patients/${patient.id}?tab=treatment`} className="btn-secondary">🎙 Надиктовать</Link>
             <div className="ml-auto text-right">
               <div className="text-[11px] uppercase tracking-wide text-ink-mute">Врач</div>

@@ -2,6 +2,7 @@ import type { Appointment, User } from "@prisma/client";
 import { APPOINTMENT_STATUS } from "@/lib/labels";
 import { toInputDateTime } from "@/lib/dates";
 import { Field, Select } from "@/components/ui";
+import { ProcedureFields } from "@/components/procedure-fields";
 
 const DURATIONS = [15, 30, 45, 60, 90, 120, 180];
 
@@ -10,11 +11,15 @@ export function AppointmentFields({
   doctors,
   defaultDoctorId,
   defaultStart,
+  prices,
+  plan,
 }: {
   ap?: Appointment;
   doctors: User[];
   defaultDoctorId: string;
   defaultStart: Date;
+  prices: { name: string; price: number }[];
+  plan: { id: string; toothNumber: number | null; treatment: string; price: number }[];
 }) {
   return (
     <div className="card card-pad grid gap-4 sm:grid-cols-2">
@@ -26,12 +31,11 @@ export function AppointmentFields({
           {DURATIONS.map((d) => <option key={d} value={d}>{d < 60 ? `${d} мин` : `${d / 60} ч`.replace(".5", ",5")}</option>)}
         </select>
       </Field>
-      <Field label="Процедура *" className="sm:col-span-2">
-        <input name="procedure" required defaultValue={ap?.procedure ?? ""} placeholder="Лечение 36 зуба" className="input" list="procedures" />
-        <datalist id="procedures">
-          {["Консультация", "Диагностика", "Лечение кариеса", "Профессиональная гигиена", "Контрольный осмотр", "Удаление", "Имплантация"].map((p) => <option key={p} value={p} />)}
-        </datalist>
-      </Field>
+      <ProcedureFields
+        prices={prices}
+        plan={plan}
+        initial={ap ? { procedure: ap.procedure, price: ap.price, toothNumber: ap.toothNumber, treatmentItemId: ap.treatmentItemId } : undefined}
+      />
       <Field label="Врач">
         <select name="doctorId" defaultValue={ap?.doctorId ?? defaultDoctorId} className="input">
           {doctors.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}

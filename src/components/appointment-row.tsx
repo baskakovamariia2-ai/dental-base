@@ -28,14 +28,17 @@ export function AppointmentRow({ a, returnTo, showDate, reminderTemplate }: { a:
           {fullName(a.patient)}
           {a.patient.isDemo && <span className="ml-1.5 text-[10px] font-semibold text-amber-600">DEMO</span>}
         </Link>
-        <div className="truncate text-sm text-ink-soft">{a.procedure}</div>
+        <div className="truncate text-sm text-ink-soft">
+          {a.toothNumber && !a.procedure.startsWith(String(a.toothNumber)) ? `${a.toothNumber} — ` : ""}{a.procedure}
+          {a.price ? <span className="ml-1.5 font-medium text-ink">{a.price.toLocaleString("ru-RU")} ₽</span> : null}
+        </div>
         {a.comment && <div className="mt-0.5 truncate text-xs text-ink-mute">{a.comment}</div>}
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <form action={setAppointmentStatus.bind(null, a.id)}>
             <input type="hidden" name="returnTo" value={returnTo} />
             <AutoSubmitSelect name="status" defaultValue={a.status} options={APPOINTMENT_STATUS} ariaLabel="Статус записи" />
           </form>
-          {!cancelled && a.status !== "DONE" && (
+          {!cancelled && a.status !== "DONE" && a.startsAt > new Date() && (
             <ReminderButton appointmentId={a.id} text={reminderText(reminderTemplate, a.startsAt)} telegram={telegramHref(a.patient)} sent={a.reminderSent} label="Напомнить в Telegram" />
           )}
           <Link href={`/schedule/${a.id}`} className="rounded-lg px-2 py-1.5 text-xs text-ink-mute hover:bg-zinc-100">
