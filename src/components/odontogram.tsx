@@ -59,7 +59,7 @@ const CHOICES: { cat: ToothCategory; status: ToothStatus }[] = [
   { cat: "treated", status: "TREATED" },
   { cat: "missing", status: "EXTRACTED" },
 ];
-const CHOICE_LABEL: Record<ToothCategory, string> = { healthy: "Здоровый", problem: "Проблемный", treated: "Леченый", missing: "Отсутствует" };
+const CHOICE_LABEL: Record<ToothCategory, string> = { healthy: "Здоровый", problem: "Проблемный", treated: "Вылеченный", missing: "Отсутствует" };
 
 function ToothSheet({
   patientId, tooth, category, plan, prices, onClose,

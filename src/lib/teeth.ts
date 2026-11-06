@@ -31,7 +31,7 @@ export function toothCategory(status: ToothStatus, hasOpenPlan: boolean): ToothC
 
 export const CATEGORY_STYLE: Record<ToothCategory, { label: string; fill: string; stroke: string; bg: string }> = {
   problem: { label: "Проблемные", fill: "#E8384F", stroke: "#E8384F", bg: "#FCE4E8" },
-  treated: { label: "Леченые", fill: "#7C5CFA", stroke: "#7C5CFA", bg: "#E6E1FD" },
+  treated: { label: "Вылеченные", fill: "#7C5CFA", stroke: "#7C5CFA", bg: "#E6E1FD" },
   healthy: { label: "Здоровые", fill: "#FFFFFF", stroke: "#C4C7CE", bg: "transparent" },
   missing: { label: "Отсутствующие", fill: "#F4F4F5", stroke: "#D4D4D8", bg: "transparent" },
 };

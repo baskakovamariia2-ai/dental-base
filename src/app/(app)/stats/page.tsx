@@ -22,7 +22,8 @@ export default async function StatsPage() {
 
   const Bars = ({ data }: { data: { source: string; _count: number }[] }) => {
     const max = Math.max(1, ...data.map((d) => d._count));
-    const rows = PATIENT_SOURCE.map((s) => ({ label: s.label, n: data.find((d) => d.source === s.value)?._count ?? 0 })).sort((a, b) => b.n - a.n);
+    const count = (v: string) => data.filter((d) => (v === "OTHER" ? ["OTHER", "YANDEX", "TWOGIS"].includes(d.source) : d.source === v)).reduce((s, d) => s + d._count, 0);
+    const rows = PATIENT_SOURCE.map((s) => ({ label: s.label, n: count(s.value) })).sort((a, b) => b.n - a.n);
     return (
       <div className="card card-pad space-y-3">
         {rows.map((r) => (

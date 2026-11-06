@@ -8,7 +8,7 @@ import { earningsByDay } from "@/lib/earnings";
 import { money } from "@/lib/format";
 import { addDays, addMonths, parseISODate, sameDay, startOfDay, startOfMonth, startOfWeek, toISODate } from "@/lib/dates";
 import { fmtDateLong, fmtTime, fullName } from "@/lib/format";
-import { APPOINTMENT_STATUS, findOpt } from "@/lib/labels";
+import { apStatusOpt } from "@/lib/labels";
 import { AppointmentRow, type AppointmentWith } from "@/components/appointment-row";
 import { Empty, PageHeader } from "@/components/ui";
 import { IconBack, IconChevron, IconPlus } from "@/components/icons";
@@ -179,7 +179,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
 }
 
 function Compact({ a }: { a: AppointmentWith }) {
-  const st = findOpt(APPOINTMENT_STATUS, a.status);
+  const st = apStatusOpt(a.status);
   return (
     <Link href={`/patients/${a.patient.id}`} className="card block px-3 py-2 hover:ring-accent/30">
       <div className="flex items-center justify-between gap-2">

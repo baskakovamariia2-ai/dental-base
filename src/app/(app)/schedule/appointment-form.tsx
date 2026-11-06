@@ -1,5 +1,5 @@
 import type { Appointment, User } from "@prisma/client";
-import { APPOINTMENT_STATUS } from "@/lib/labels";
+import { APPOINTMENT_STATUS, apStatusOpt } from "@/lib/labels";
 import { toInputDateTime } from "@/lib/dates";
 import { Field, Select } from "@/components/ui";
 import { ProcedureFields } from "@/components/procedure-fields";
@@ -41,7 +41,7 @@ export function AppointmentFields({
           {doctors.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
         </select>
       </Field>
-      <Field label="Статус"><Select name="status" options={APPOINTMENT_STATUS} defaultValue={ap?.status ?? "SCHEDULED"} /></Field>
+      <Field label="Статус"><Select name="status" options={APPOINTMENT_STATUS} defaultValue={ap ? apStatusOpt(ap.status).value : "SCHEDULED"} /></Field>
       <Field label="Комментарий" className="sm:col-span-2"><textarea name="comment" rows={2} defaultValue={ap?.comment ?? ""} className="input" /></Field>
     </div>
   );

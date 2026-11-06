@@ -30,7 +30,7 @@ export function PatientForm({
         </Field>
       </div>
       <div className="card card-pad grid gap-4 sm:grid-cols-2">
-        <Field label="Откуда узнал о нас? *"><Select name="source" options={PATIENT_SOURCE} defaultValue={patient?.source ?? "INSTAGRAM"} /></Field>
+        <Field label="Откуда узнал о нас? *"><Select name="source" options={PATIENT_SOURCE} defaultValue={patient ? (patient.source === "YANDEX" || patient.source === "TWOGIS" ? "OTHER" : patient.source) : "FRIENDS"} /></Field>
         <Field label="Уточнение (кто порекомендовал и т.п.)"><input name="sourceComment" defaultValue={patient?.sourceComment ?? ""} className="input" /></Field>
         <Field label="Статус"><Select name="status" options={PATIENT_STATUS} defaultValue={patient?.status ?? "NEW"} /></Field>
         <Field label="Прайс, который отправили">

@@ -16,24 +16,31 @@ export const PATIENT_STATUS: Opt<PatientStatus>[] = [
   { value: "COMPLETED", label: "Лечение завершено", cls: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
 ];
 
+/** Варианты в форме пациента */
 export const PATIENT_SOURCE: Opt<PatientSource>[] = [
-  { value: "INSTAGRAM", label: "Instagram", cls: "" },
-  { value: "REFERRAL", label: "Рекомендация пациента", cls: "" },
-  { value: "YANDEX", label: "Яндекс", cls: "" },
-  { value: "TWOGIS", label: "2ГИС", cls: "" },
   { value: "FRIENDS", label: "Знакомые", cls: "" },
+  { value: "REFERRAL", label: "Рекомендация пациента", cls: "" },
+  { value: "INSTAGRAM", label: "Instagram", cls: "" },
   { value: "OTHER", label: "Другое", cls: "" },
 ];
-
-export const APPOINTMENT_STATUS: Opt<AppointmentStatus>[] = [
-  { value: "SCHEDULED", label: "Запланирован", cls: "bg-zinc-100 text-zinc-700 ring-zinc-200" },
-  { value: "CONFIRMED", label: "Подтверждён", cls: "bg-sky-50 text-sky-700 ring-sky-200" },
-  { value: "ARRIVED", label: "Пришёл", cls: "bg-teal-50 text-teal-700 ring-teal-200" },
-  { value: "IN_PROGRESS", label: "В процессе", cls: "bg-amber-50 text-amber-700 ring-amber-200" },
-  { value: "DONE", label: "Завершён", cls: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
-  { value: "CANCELLED", label: "Отменён", cls: "bg-zinc-50 text-zinc-400 ring-zinc-200 line-through" },
-  { value: "NO_SHOW", label: "Не пришёл", cls: "bg-rose-50 text-rose-700 ring-rose-200" },
+/** Для отображения старых записей (Яндекс/2ГИС больше не выбираются, показываются как «Другое») */
+export const PATIENT_SOURCE_ALL: Opt<PatientSource>[] = [
+  ...PATIENT_SOURCE,
+  { value: "YANDEX", label: "Другое", cls: "" },
+  { value: "TWOGIS", label: "Другое", cls: "" },
 ];
+
+/** Статусы записи: только три */
+export const APPOINTMENT_STATUS: Opt<AppointmentStatus>[] = [
+  { value: "SCHEDULED", label: "Запланирован", cls: "bg-sky-50 text-sky-700 ring-sky-200" },
+  { value: "CANCELLED", label: "Отменён", cls: "bg-zinc-50 text-zinc-400 ring-zinc-200 line-through" },
+  { value: "DONE", label: "Завершён", cls: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
+];
+/** Старые статусы показываем как ближайший из трёх */
+export function apStatusOpt(s: AppointmentStatus) {
+  const v: AppointmentStatus = s === "DONE" ? "DONE" : s === "CANCELLED" || s === "NO_SHOW" ? "CANCELLED" : "SCHEDULED";
+  return APPOINTMENT_STATUS.find((o) => o.value === v)!;
+}
 
 export const TOOTH_STATUS: (Opt<ToothStatus> & { fill: string; stroke: string })[] = [
   { value: "HEALTHY", label: "Здоров", cls: "bg-white text-zinc-600 ring-zinc-200", fill: "#ffffff", stroke: "#d4d4d8" },

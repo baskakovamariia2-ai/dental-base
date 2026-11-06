@@ -3,6 +3,7 @@ import type { ToothStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { getSettings } from "@/lib/settings";
+import { buildStages } from "@/lib/stages";
 import { fmtDate, money } from "@/lib/format";
 import { LOWER, UPPER, toothCategory } from "@/lib/teeth";
 import { CategoryLegend, ToothCellView } from "@/components/tooth-shape";
@@ -65,33 +66,41 @@ export default async function PrintPlanPage({ params }: { params: Promise<{ id: 
         {items.length === 0 ? (
           <p className="text-zinc-500">Предстоящего лечения нет.</p>
         ) : (
-          <section className="break-inside-avoid">
-            <table className="w-full border-collapse text-[14px]">
-              <thead>
-                <tr className="border-b-2 border-zinc-200 text-left text-[12px] uppercase tracking-wide text-zinc-400">
-                  <th className="w-14 py-2 font-medium">Зуб</th>
-                  <th className="py-2 font-medium">Лечение</th>
-                  <th className="py-2 text-right font-medium">Стоимость</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((i) => (
-                  <tr key={i.id} className="border-b border-zinc-100">
-                    <td className="py-2.5 align-top">
-                      {i.toothNumber !== null ? (
-                        <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-lg bg-[#FCE4E8] px-1.5 text-[13px] font-semibold tabular-nums text-[#C81E3A]">{i.toothNumber}</span>
-                      ) : "—"}
-                    </td>
-                    <td className="py-2.5">
-                      {i.treatment}
-                      {i.note && <div className="text-[12px] text-zinc-500">{i.note}</div>}
-                    </td>
-                    <td className="py-2.5 text-right tabular-nums">{i.price ? money(i.price) : "—"}</td>
-                  </tr>
+          <section className="space-y-6">
+            {buildStages(items).map((st) => (
+              <div key={st.key} className="break-inside-avoid">
+                <div className="mb-2 flex items-baseline justify-between border-b-2 border-zinc-200 pb-1.5">
+                  <h2 className="text-[16px] font-semibold">Этап {st.key <= 5 ? st.key : ""} · {st.title}</h2>
+                  <span className="text-[14px] font-medium tabular-nums">{money(st.total)}</span>
+                </div>
+                {st.visits.map((v) => (
+                  <div key={v.n} className="mb-2">
+                    <div className="py-1 text-[12px] font-medium uppercase tracking-wide text-zinc-400">
+                      Приём {v.n}{v.teeth.length ? ` · ${v.teeth.length > 1 ? "зубы" : "зуб"} ${v.teeth.join(", ")}` : ""}
+                    </div>
+                    <table className="w-full border-collapse text-[14px]">
+                      <tbody>
+                        {v.items.map((i) => (
+                          <tr key={i.id} className="border-b border-zinc-100">
+                            <td className="w-14 py-2 align-top">
+                              {i.toothNumber !== null ? (
+                                <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-lg bg-[#FCE4E8] px-1.5 text-[13px] font-semibold tabular-nums text-[#C81E3A]">{i.toothNumber}</span>
+                              ) : "—"}
+                            </td>
+                            <td className="py-2">
+                              {i.treatment}
+                              {i.note && <div className="text-[12px] text-zinc-500">{i.note}</div>}
+                            </td>
+                            <td className="py-2 text-right tabular-nums">{i.price ? money(i.price) : "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 ))}
-              </tbody>
-            </table>
-            <div className="mt-4 flex items-baseline justify-end gap-6 text-[17px]">
+              </div>
+            ))}
+            <div className="flex items-baseline justify-end gap-6 border-t-2 border-zinc-200 pt-3 text-[17px]">
               <span className="text-zinc-500">Итого</span>
               <span className="font-semibold tabular-nums">{money(total)}</span>
             </div>

@@ -3,7 +3,7 @@ import type { Appointment, Patient, User } from "@prisma/client";
 import { setAppointmentStatus } from "@/actions/appointments";
 import { reminderText } from "@/lib/reminder";
 import { ReminderButton } from "./reminder-button";
-import { APPOINTMENT_STATUS } from "@/lib/labels";
+import { APPOINTMENT_STATUS, apStatusOpt } from "@/lib/labels";
 import { fmtTime, fullName, telegramHref } from "@/lib/format";
 import { AutoSubmitSelect } from "./auto-submit";
 
@@ -36,7 +36,7 @@ export function AppointmentRow({ a, returnTo, showDate, reminderTemplate }: { a:
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <form action={setAppointmentStatus.bind(null, a.id)}>
             <input type="hidden" name="returnTo" value={returnTo} />
-            <AutoSubmitSelect name="status" defaultValue={a.status} options={APPOINTMENT_STATUS} ariaLabel="Статус записи" />
+            <AutoSubmitSelect name="status" defaultValue={apStatusOpt(a.status).value} options={APPOINTMENT_STATUS} ariaLabel="Статус записи" />
           </form>
           {!cancelled && a.status !== "DONE" && a.startsAt > new Date() && (
             <ReminderButton appointmentId={a.id} text={reminderText(reminderTemplate, a.startsAt)} telegram={telegramHref(a.patient)} sent={a.reminderSent} label="Напомнить в Telegram" />

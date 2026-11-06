@@ -6,10 +6,11 @@ import { patientStats, ALL_TEETH } from "@/lib/teeth";
 import { getReminderTemplate, reminderText } from "@/lib/reminder";
 import { fillMissingPrices } from "@/lib/plan";
 import { getSettings } from "@/lib/settings";
+import { buildStages } from "@/lib/stages";
 import { ReminderButton } from "@/components/reminder-button";
 import { fileSize, fmtDate, fmtDateTime, fullName, initials, money, phoneHref, telegramHref } from "@/lib/format";
 import { toISODate } from "@/lib/dates";
-import { FILE_CATEGORY, PATIENT_SOURCE, PATIENT_STATUS, TOOTH_STATUS, TREATMENT_STATUS, findOpt } from "@/lib/labels";
+import { FILE_CATEGORY, PATIENT_SOURCE_ALL, PATIENT_STATUS, TOOTH_STATUS, TREATMENT_STATUS, findOpt } from "@/lib/labels";
 import { setPatientPriceList, setPatientStatus } from "@/actions/patients";
 import { addTreatmentItem, deleteTreatmentItem, updateTreatmentItem } from "@/actions/treatment";
 import { addFileLink, deletePatientFile } from "@/actions/files";
@@ -172,7 +173,7 @@ export default async function PatientPage({
             <InfoRow label="Первый визит">{fmtDate(patient.firstVisitDate)}</InfoRow>
             <InfoRow label="Дата рождения">{fmtDate(patient.birthDate)}</InfoRow>
             <InfoRow label="Откуда узнал">
-              {findOpt(PATIENT_SOURCE, patient.source).label}
+              {findOpt(PATIENT_SOURCE_ALL, patient.source).label}
               {patient.sourceComment ? ` · ${patient.sourceComment}` : ""}
             </InfoRow>
             <InfoRow label="Прайс">{patient.priceList?.name ?? (effectiveList ? `${effectiveList.name} (по умолчанию)` : "—")}</InfoRow>
@@ -217,7 +218,7 @@ export default async function PatientPage({
               <Stat label="Под удаление" value={stats.extraction} />
               <Stat label="Коронки" value={stats.crowns} />
               <Stat label="Проблемных зубов" value={stats.problem} />
-              <Stat label="Леченых зубов" value={stats.treated} />
+              <Stat label="Вылеченных зубов" value={stats.treated} />
               <Stat label="Отсутствуют" value={stats.missing} />
             </div>
           </div>
@@ -237,47 +238,62 @@ export default async function PatientPage({
           {planItems.length === 0 ? (
             <Empty>План пуст. Надиктуйте формулу на вкладке «Лечение» или добавьте пункт ниже.</Empty>
           ) : (
-            <div className="card divide-y divide-zinc-100 overflow-hidden">
-              <div className="hidden grid-cols-[56px_1fr_110px_170px_40px] gap-3 px-4 py-2.5 text-xs font-medium text-ink-mute md:grid">
-                <span>Зуб</span><span>Лечение</span><span className="text-right">Цена</span><span>Статус</span><span />
-              </div>
-              {planItems.map((i) => (
-                <div key={i.id} className={`px-4 py-3 ${i.status === "CANCELLED" ? "opacity-50" : ""}`}>
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2 md:grid md:grid-cols-[56px_1fr_110px_170px_40px]">
-                    <span className="text-[15px] font-semibold tabular-nums">{i.toothNumber ?? "—"}</span>
-                    <span className="min-w-0 flex-1 text-[15px] md:flex-none">
-                      {i.treatment}
-                      {i.note && <span className="block text-xs text-ink-mute">{i.note}</span>}
-                    </span>
-                    <span className={`text-right text-[15px] font-medium tabular-nums ${i.price ? "" : "text-orange-600"}`}>{i.price ? money(i.price) : "нет цены"}</span>
-                    <form action={updateTreatmentItem.bind(null, i.id)}>
-                      <AutoSubmitSelect name="status" defaultValue={i.status} options={TREATMENT_STATUS} ariaLabel="Статус лечения" />
-                    </form>
-                    <form action={deleteTreatmentItem.bind(null, i.id)} className="ml-auto md:ml-0">
-                      <ConfirmButton message="Удалить пункт плана?" className="rounded-lg px-2 py-1 text-ink-mute hover:bg-rose-50 hover:text-rose-600">✕</ConfirmButton>
-                    </form>
+            <div className="space-y-5">
+              {buildStages(planItems).map((st) => (
+                <section key={st.key}>
+                  <div className="mb-2 flex items-baseline justify-between px-1">
+                    <h3 className="text-[15px] font-semibold">Этап {st.key <= 5 ? st.key : ""} · {st.title}</h3>
+                    <span className="text-sm tabular-nums text-ink-soft">{money(st.total)}</span>
                   </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-2 text-sm md:pl-[68px]">
-                    <span className={i.paid >= i.price && i.price > 0 ? "text-emerald-700" : "text-ink-mute"}>Оплачено: {money(i.paid)}</span>
-                    {i.paid < i.price && (
-                      <form action={updateTreatmentItem.bind(null, i.id)}>
-                        <input type="hidden" name="markPaid" value="1" />
-                        <button className="rounded-lg bg-zinc-100 px-2.5 py-1 text-xs font-medium hover:bg-zinc-200">Оплачено полностью</button>
-                      </form>
-                    )}
-                    <details className="w-full sm:w-auto">
-                      <summary className="cursor-pointer list-none rounded-lg px-2 py-1 text-xs text-ink-mute hover:bg-zinc-100">Изменить</summary>
-                      <form action={updateTreatmentItem.bind(null, i.id)} className="mt-2 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-end">
-                        <label className="col-span-2 block"><span className="label">Лечение</span><input name="treatment" defaultValue={i.treatment} className="input sm:w-56" /></label>
-                        <label className="col-span-2 block"><span className="label">Заметка</span><input name="note" defaultValue={i.note ?? ""} className="input sm:w-48" /></label>
-                        <label className="block"><span className="label">Цена</span><input name="price" inputMode="numeric" defaultValue={i.price} className="input sm:w-28" /></label>
-                        <label className="block"><span className="label">Оплачено</span><input name="paid" inputMode="numeric" defaultValue={i.paid} className="input sm:w-28" /></label>
-                        <button className="btn-primary btn-sm col-span-2 h-11">Сохранить</button>
-                      </form>
-                    </details>
+                  <div className="card divide-y divide-zinc-100 overflow-hidden">
+                    {st.visits.map((v) => (
+                      <div key={v.n}>
+                        <div className="bg-zinc-50 px-4 py-1.5 text-xs font-medium text-ink-soft">
+                          Приём {v.n}{v.teeth.length ? ` · ${v.teeth.length > 1 ? "зубы" : "зуб"} ${v.teeth.join(", ")}` : ""}
+                        </div>
+                        {v.items.map((i) => (
+                    <div key={i.id} className={`px-4 py-3 ${i.status === "CANCELLED" ? "opacity-50" : ""}`}>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 md:grid md:grid-cols-[56px_1fr_110px_170px_40px]">
+                        <span className="text-[15px] font-semibold tabular-nums">{i.toothNumber ?? "—"}</span>
+                        <span className="min-w-0 flex-1 text-[15px] md:flex-none">
+                          {i.treatment}
+                          {i.note && <span className="block text-xs text-ink-mute">{i.note}</span>}
+                        </span>
+                        <span className={`text-right text-[15px] font-medium tabular-nums ${i.price ? "" : "text-orange-600"}`}>{i.price ? money(i.price) : "нет цены"}</span>
+                        <form action={updateTreatmentItem.bind(null, i.id)}>
+                          <AutoSubmitSelect name="status" defaultValue={i.status} options={TREATMENT_STATUS} ariaLabel="Статус лечения" />
+                        </form>
+                        <form action={deleteTreatmentItem.bind(null, i.id)} className="ml-auto md:ml-0">
+                          <ConfirmButton message="Удалить пункт плана?" className="rounded-lg px-2 py-1 text-ink-mute hover:bg-rose-50 hover:text-rose-600">✕</ConfirmButton>
+                        </form>
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-sm md:pl-[68px]">
+                        <span className={i.paid >= i.price && i.price > 0 ? "text-emerald-700" : "text-ink-mute"}>Оплачено: {money(i.paid)}</span>
+                        {i.paid < i.price && (
+                          <form action={updateTreatmentItem.bind(null, i.id)}>
+                            <input type="hidden" name="markPaid" value="1" />
+                            <button className="rounded-lg bg-zinc-100 px-2.5 py-1 text-xs font-medium hover:bg-zinc-200">Оплачено полностью</button>
+                          </form>
+                        )}
+                        <details className="w-full sm:w-auto">
+                          <summary className="cursor-pointer list-none rounded-lg px-2 py-1 text-xs text-ink-mute hover:bg-zinc-100">Изменить</summary>
+                          <form action={updateTreatmentItem.bind(null, i.id)} className="mt-2 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-end">
+                            <label className="col-span-2 block"><span className="label">Лечение</span><input name="treatment" defaultValue={i.treatment} className="input sm:w-56" /></label>
+                            <label className="col-span-2 block"><span className="label">Заметка</span><input name="note" defaultValue={i.note ?? ""} className="input sm:w-48" /></label>
+                            <label className="block"><span className="label">Цена</span><input name="price" inputMode="numeric" defaultValue={i.price} className="input sm:w-28" /></label>
+                            <label className="block"><span className="label">Оплачено</span><input name="paid" inputMode="numeric" defaultValue={i.paid} className="input sm:w-28" /></label>
+                            <button className="btn-primary btn-sm col-span-2 h-11">Сохранить</button>
+                          </form>
+                        </details>
+                      </div>
+                    </div>
+                        ))}
+                      </div>
+                    ))}
                   </div>
-                </div>
+                </section>
               ))}
+              <p className="px-1 text-xs text-ink-mute">Порядок: сначала кариес и каналы, потом удаление, имплантация и коронки. Соседние зубы объединены в один приём.</p>
             </div>
           )}
 
