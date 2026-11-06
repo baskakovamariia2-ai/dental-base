@@ -117,7 +117,7 @@ export default async function MorePage({ searchParams }: { searchParams: Promise
           {sp.ai && AIMSG[sp.ai] && <p className={`mb-3 rounded-xl px-3 py-2.5 text-sm ${AIMSG[sp.ai][1]}`}>{AIMSG[sp.ai][0]}</p>}
           <div className="card card-pad space-y-3">
             <p className="text-sm text-ink-soft">
-              {aiKey ? <>Ключ сохранён: <b>…{aiKey.slice(-4)}</b>. На вкладке «КТ» в карточке пациента можно отправлять срезы ИИ.</> : "ИИ даёт врачу короткую подсказку по срезам КТ. Для этого нужен бесплатный ключ ГигаЧата."}
+              {aiKey ? <>Ключ сохранён: <b>…{aiKey.slice(-4)}</b>. На вкладке «КТ» в карточке пациента можно отправлять скриншоты ИИ.</> : "ИИ даёт врачу короткую подсказку по срезам КТ. Для этого нужен бесплатный ключ ГигаЧата."}
             </p>
             {!aiKey && (
               <ol className="list-decimal space-y-1 pl-5 text-sm text-ink-soft">
@@ -137,7 +137,7 @@ export default async function MorePage({ searchParams }: { searchParams: Promise
                 <form action={saveGigachatKey}><input type="hidden" name="remove" value="1" /><ConfirmButton message="Удалить ключ и отключить ИИ?" className="btn-ghost btn-sm">Удалить ключ</ConfirmButton></form>
               </div>
             )}
-            <p className="text-xs text-ink-mute">В ГигаЧат уходит только картинка и номер зуба, без ФИО. Данные Сбер хранит на серверах в России.</p>
+            <p className="text-xs text-ink-mute">В ГигаЧат уходит только картинка, без ФИО, и сразу удаляется оттуда. У нас картинки не сохраняются.</p>
           </div>
         </section>
       )}

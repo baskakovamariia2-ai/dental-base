@@ -9,7 +9,7 @@ import { getSettings } from "@/lib/settings";
 import { ReminderButton } from "@/components/reminder-button";
 import { fileSize, fmtDate, fmtDateTime, fullName, initials, money, phoneHref, telegramHref } from "@/lib/format";
 import { toISODate } from "@/lib/dates";
-import { FILE_CATEGORY, PATIENT_SOURCE, PATIENT_STATUS, TREATMENT_STATUS, findOpt } from "@/lib/labels";
+import { FILE_CATEGORY, PATIENT_SOURCE, PATIENT_STATUS, TOOTH_STATUS, TREATMENT_STATUS, findOpt } from "@/lib/labels";
 import { setPatientPriceList, setPatientStatus } from "@/actions/patients";
 import { addTreatmentItem, deleteTreatmentItem, updateTreatmentItem } from "@/actions/treatment";
 import { addFileLink, deletePatientFile } from "@/actions/files";
@@ -17,9 +17,9 @@ import { AutoSubmitSelect, ConfirmButton } from "@/components/auto-submit";
 import { Odontogram, type PriceOption } from "@/components/odontogram";
 import { DictationBox } from "@/components/dictation";
 import { FileUpload } from "@/components/file-upload";
-import { CtUpload, PendingButton } from "@/components/ct-upload";
-import { deleteCtNote, retryCtNote, saveCtConclusion } from "@/actions/ct";
-import { getGigachatKey } from "@/lib/gigachat";
+import { CtUpload } from "@/components/ct-upload";
+import { confirmFinding, rejectAllFindings, rejectFinding } from "@/actions/ct";
+import { AI_STATUSES, getGigachatKey } from "@/lib/gigachat";
 import { TreatmentFields } from "@/components/price-picker";
 import { Badge, Empty, Field, Stat } from "@/components/ui";
 import { IconBack, IconCalendar, IconPhone, IconPlus, IconTooth } from "@/components/icons";
@@ -56,7 +56,7 @@ export default async function PatientPage({
       priceList: { include: { items: { orderBy: { sortOrder: "asc" } } } },
       visits: { orderBy: { date: "desc" }, include: { doctor: true } },
       files: { orderBy: [{ date: "desc" }, { createdAt: "desc" }] },
-      ctNotes: { orderBy: { createdAt: "desc" } },
+      ctFindings: { orderBy: [{ toothNumber: "asc" }, { createdAt: "asc" }] },
       appointments: {
         where: { startsAt: { gte: now }, status: { notIn: ["CANCELLED", "NO_SHOW", "DONE"] } },
         orderBy: { startsAt: "asc" },
@@ -144,7 +144,7 @@ export default async function PatientPage({
           >
             {t.label}
             {t.key === "plan" && openItems > 0 && <span className="ml-1 text-xs text-orange-600">{openItems}</span>}
-            {t.key === "ct" && patient.ctNotes.length > 0 && <span className="ml-1 text-xs text-ink-mute">{patient.ctNotes.length}</span>}
+            {t.key === "ct" && patient.ctFindings.length > 0 && <span className="ml-1 text-xs text-orange-600">{patient.ctFindings.length}</span>}
             {t.key === "files" && patient.files.length > 0 && <span className="ml-1 text-xs text-ink-mute">{patient.files.length}</span>}
           </Link>
         ))}
@@ -349,67 +349,46 @@ export default async function PatientPage({
               ))}
             </p>
           )}
-          {patient.ctNotes.length === 0 && <Empty>Разборов КТ пока нет</Empty>}
-          {patient.ctNotes.map((n) => (
-            <article key={n.id} className="card card-pad">
-              <div className="flex gap-3">
-                <a href={`/api/files/${n.fileId}`} target="_blank" rel="noopener noreferrer" className="shrink-0">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={`/api/files/${n.fileId}`} alt="Срез КТ" loading="lazy" className="h-24 w-24 rounded-xl bg-zinc-100 object-cover sm:h-28 sm:w-28" />
-                </a>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <div className="text-[17px] font-semibold">{n.toothNumber ? `Зуб ${n.toothNumber}` : "Весь снимок"}</div>
-                      <div className="text-xs text-ink-mute">{fmtDateTime(n.createdAt)}</div>
-                    </div>
-                    <form action={deleteCtNote.bind(null, n.id)}>
-                      <ConfirmButton message="Удалить разбор и картинку?" className="px-2 text-ink-mute hover:text-rose-600">✕</ConfirmButton>
+          {patient.ctFindings.length > 0 && (
+            <section>
+              <div className="mb-2 flex items-baseline justify-between gap-2">
+                <h2 className="section-title mb-0">Находки ИИ · проверьте каждую · {patient.ctFindings.length}</h2>
+                <form action={rejectAllFindings.bind(null, patient.id)}>
+                  <ConfirmButton message="Отклонить все находки ИИ?" className="text-xs text-ink-mute hover:text-rose-600">Отклонить все</ConfirmButton>
+                </form>
+              </div>
+              <div className="space-y-2.5">
+                {patient.ctFindings.map((f) => (
+                  <div key={f.id} className="card card-pad">
+                    <form action={confirmFinding.bind(null, f.id)} className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <select name="tooth" defaultValue={f.toothNumber ?? ""} className="input w-auto min-w-[110px] py-2 font-semibold" aria-label="Зуб">
+                          <option value="">Без зуба</option>
+                          {[...ALL_TEETH].sort((a, b) => a - b).map((n) => <option key={n} value={n}>Зуб {n}</option>)}
+                        </select>
+                        {f.confidence && <span className="text-xs text-ink-mute">уверенность ИИ: {f.confidence}</span>}
+                      </div>
+                      <textarea name="text" rows={2} defaultValue={f.text} className="input text-[15px]" aria-label="Находка" />
+                      <div className="flex flex-wrap items-center gap-2">
+                        <select name="status" defaultValue={f.status ?? ""} className="input w-auto flex-1 py-2 text-sm sm:flex-none" aria-label="Состояние зуба в схеме">
+                          <option value="">Схему не менять</option>
+                          {TOOTH_STATUS.filter((o) => (AI_STATUSES as readonly string[]).includes(o.value)).map((o) => (
+                            <option key={o.value} value={o.value}>В схеме: {o.label}</option>
+                          ))}
+                        </select>
+                        <button className="btn-accent btn-sm">✓ Подтвердить</button>
+                        <button formAction={rejectFinding.bind(null, f.id)} className="btn-ghost btn-sm text-rose-600">✕ Отклонить</button>
+                      </div>
                     </form>
                   </div>
-                  {n.doctorText && (
-                    <div className="mt-2 rounded-xl bg-emerald-50 px-3 py-2 text-[15px] text-emerald-900">
-                      <div className="text-[11px] font-medium uppercase tracking-wide text-emerald-700">Заключение врача</div>
-                      <p className="whitespace-pre-wrap">{n.doctorText}</p>
-                    </div>
-                  )}
-                </div>
+                ))}
               </div>
-
-              <div className="mt-3 rounded-xl bg-zinc-50 px-3 py-2.5">
-                <div className="text-[11px] font-medium uppercase tracking-wide text-ink-mute">🤖 Подсказка ИИ · черновик, не диагноз</div>
-                {n.aiText ? (
-                  <p className="mt-1 whitespace-pre-wrap text-[15px] text-ink-soft">{n.aiText}</p>
-                ) : n.aiError ? (
-                  <p className="mt-1 text-sm text-rose-600">{n.aiError}</p>
-                ) : (
-                  <p className="mt-1 text-sm text-ink-mute">Ответа ещё нет.</p>
-                )}
-                {!n.aiText && (
-                  <form action={retryCtNote.bind(null, n.id)} className="mt-2">
-                    <PendingButton pendingText="ИИ смотрит…" className="btn-secondary btn-sm">Повторить</PendingButton>
-                  </form>
-                )}
-              </div>
-
-              <details className="mt-3" open={!n.doctorText && !!n.aiText}>
-                <summary className="cursor-pointer list-none text-sm font-medium text-accent">{n.doctorText ? "Изменить заключение" : "Написать заключение врача"}</summary>
-                <form action={saveCtConclusion.bind(null, n.id)} className="mt-2 space-y-2">
-                  <textarea name="doctorText" rows={3} defaultValue={n.doctorText ?? ""} placeholder="Что видит врач (это и будет диагноз)" className="input text-[15px]" />
-                  {n.toothNumber && (
-                    <label className="flex items-center gap-2 text-sm text-ink-soft">
-                      <input type="checkbox" name="toTooth" value="1" defaultChecked className="h-5 w-5" />
-                      Записать в карту зуба {n.toothNumber}
-                    </label>
-                  )}
-                  <button className="btn-primary btn-sm">Сохранить</button>
-                </form>
-              </details>
-            </article>
-          ))}
+              <p className="mt-2 px-1 text-xs text-ink-mute">Подтверждённая находка записывается в карту зуба (видно в зубной схеме на вкладке «Лечение»). Номер зуба и текст можно поправить перед подтверждением.</p>
+            </section>
+          )}
           <p className="px-1 text-xs text-ink-mute">
-            ИИ (ГигаЧат) получает только картинку и номер зуба — без имени пациента. Его ответ может быть неточным: врач всегда проверяет снимок сам.
-            Пациенту показывается только заключение врача.
+            ИИ (ГигаЧат) получает только картинку — без имени пациента. Его находки могут быть неточными: врач всегда проверяет снимок сам.
+            Пока находка не подтверждена, она никуда не записывается и пациенту не показывается.
           </p>
         </div>
       )}

@@ -2,46 +2,53 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import type { ToothStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireRole, requireUser } from "@/lib/auth";
-import { optStr, str } from "@/lib/forms";
-import { removeFile } from "@/lib/storage";
-import { runCtAnalysis } from "@/lib/ct";
-import { AiError, KEY_SETTING, getGigachatKey, testKey } from "@/lib/gigachat";
+import { str } from "@/lib/forms";
+import { isValidTooth } from "@/lib/teeth";
+import { AI_STATUSES, AiError, KEY_SETTING, getGigachatKey, testKey } from "@/lib/gigachat";
 
-/** Заключение врача по срезу. По желанию — записать его в карту зуба. */
-export async function saveCtConclusion(noteId: string, formData: FormData) {
+/** Врач подтвердил находку: записываем в карту зуба (заметка + по желанию состояние) и убираем из списка */
+export async function confirmFinding(id: string, formData: FormData) {
   await requireUser();
-  const doctorText = optStr(formData, "doctorText", 3000);
-  const note = await prisma.ctNote.update({ where: { id: noteId }, data: { doctorText } });
-  if (doctorText && note.toothNumber && formData.get("toTooth") === "1") {
-    // дописываем в заметку зуба (она видна в зубной схеме), не стирая то, что там было
-    const where = { patientId_number: { patientId: note.patientId, number: note.toothNumber } };
-    const line = `КТ: ${doctorText}`;
-    const tooth = await prisma.tooth.findUnique({ where });
-    if (!tooth) await prisma.tooth.create({ data: { patientId: note.patientId, number: note.toothNumber, notes: line } });
-    else if (!(tooth.notes ?? "").includes(line)) {
-      await prisma.tooth.update({ where, data: { notes: tooth.notes ? `${tooth.notes}\n${line}` : line } });
-    }
+  const f = await prisma.ctFinding.findUnique({ where: { id } });
+  if (!f) return;
+  const tooth = Number(str(formData, "tooth"));
+  const text = str(formData, "text", 500) || f.text;
+  const statusRaw = str(formData, "status");
+  const status = (AI_STATUSES as readonly string[]).includes(statusRaw) ? (statusRaw as ToothStatus) : null;
+
+  if (isValidTooth(tooth)) {
+    const where = { patientId_number: { patientId: f.patientId, number: tooth } };
+    const line = `КТ: ${text}`;
+    const existing = await prisma.tooth.findUnique({ where });
+    const notes = !existing?.notes ? line : existing.notes.includes(line) ? existing.notes : `${existing.notes}\n${line}`;
+    await prisma.tooth.upsert({
+      where,
+      create: { patientId: f.patientId, number: tooth, notes, ...(status ? { status } : {}) },
+      update: { notes, ...(status ? { status } : {}) },
+    });
+  } else {
+    // без номера зуба — в общие заметки пациента
+    const p = await prisma.patient.findUnique({ where: { id: f.patientId }, select: { notes: true } });
+    const line = `КТ: ${text}`;
+    await prisma.patient.update({ where: { id: f.patientId }, data: { notes: p?.notes ? `${p.notes}\n${line}` : line } });
   }
-  revalidatePath(`/patients/${note.patientId}`);
+  await prisma.ctFinding.delete({ where: { id } });
+  revalidatePath(`/patients/${f.patientId}`);
 }
 
-export async function retryCtNote(noteId: string) {
+export async function rejectFinding(id: string) {
   await requireUser();
-  const note = await prisma.ctNote.findUnique({ where: { id: noteId } });
-  if (!note) return;
-  await runCtAnalysis(noteId);
-  revalidatePath(`/patients/${note.patientId}`);
+  const f = await prisma.ctFinding.delete({ where: { id } }).catch(() => null);
+  if (f) revalidatePath(`/patients/${f.patientId}`);
 }
 
-export async function deleteCtNote(noteId: string) {
+export async function rejectAllFindings(patientId: string) {
   await requireUser();
-  const note = await prisma.ctNote.findUnique({ where: { id: noteId }, include: { file: true } });
-  if (!note) return;
-  await prisma.patientFile.delete({ where: { id: note.fileId } }); // заметка удалится вместе с картинкой
-  await removeFile(note.file.storageKey);
-  revalidatePath(`/patients/${note.patientId}`);
+  await prisma.ctFinding.deleteMany({ where: { patientId } });
+  revalidatePath(`/patients/${patientId}`);
 }
 
 /** Ключ ГигаЧата — только администратор */
@@ -57,7 +64,7 @@ export async function saveGigachatKey(formData: FormData) {
     await testKey(value);
   } catch (e) {
     const code = e instanceof AiError && /не подходит/.test(e.message) ? "bad" : "net";
-    // ключ сохраняем даже при ошибке связи, чтобы не вводить заново
+    // при ошибке связи ключ всё равно сохраняем, чтобы не вводить заново
     if (code === "net") await prisma.setting.upsert({ where: { key: KEY_SETTING }, create: { key: KEY_SETTING, value }, update: { value } });
     redirect(`/more?ai=${code}#ai`);
   }

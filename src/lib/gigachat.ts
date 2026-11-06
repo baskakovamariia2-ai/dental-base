@@ -77,23 +77,58 @@ export async function testKey(key: string) {
   await getToken(key);
 }
 
-const SYSTEM_PROMPT = `Ты помощник врача-стоматолога. Тебе показывают фрагмент КЛКТ (конусно-лучевой компьютерной томографии) или панорамную реконструкцию.
-Твоя задача — коротко перечислить, что видно на снимке, чтобы врач обратил на это внимание. Это черновик для врача, а не диагноз для пациента.
-Правила:
-- Номера зубов по FDI (11–48).
-- Отмечай: признаки кариеса, пломбы, коронки, импланты, штифты, леченые/нелеченые каналы, расширение периодонтальной щели, очаги в области верхушек корней, убыль костной ткани, отсутствующие и ретинированные зубы.
-- Для каждой находки укажи уверенность: низкая / средняя / высокая.
-- Если что-то не видно или снимок нечёткий — так и напиши. Ничего не выдумывай.
-- Формат: от 1 до 8 коротких строк вида «36 — признаки кариеса на жевательной поверхности (уверенность: средняя)».
-- Без вступления, без советов по лечению, без дисклеймеров.`;
+export type Finding = { tooth: number | null; text: string; status: string | null; confidence: string | null };
 
-/** Отправляет картинку в ГигаЧат и возвращает короткий текст-подсказку */
-export async function analyzeCtImage(image: Buffer, toothNumber: number | null): Promise<string> {
+// Состояния, которые ИИ может предложить для зубной схемы (врач подтверждает)
+export const AI_STATUSES = ["CARIES", "FILLING", "CROWN", "IMPLANT", "EXTRACTED", "OBSERVATION"] as const;
+
+const SYSTEM_PROMPT = `Ты помощник врача-стоматолога. Тебе показывают скриншот КЛКТ (конусно-лучевой компьютерной томографии): срез или панорамную реконструкцию.
+Найди на снимке зубы и коротко перечисли находки по каждому зубу, где что-то есть. Это черновик для врача, он подтвердит или отклонит каждую находку.
+Правила:
+- Номера зубов по FDI (11–48). Если номер определить нельзя — "tooth": null.
+- Отмечай: признаки кариеса, пломбы, коронки, импланты, штифты, леченые/нелеченые каналы, расширение периодонтальной щели, очаги у верхушек корней, убыль кости, отсутствующие и ретинированные зубы.
+- "status" — одно из: CARIES (кариес), FILLING (пломба), CROWN (коронка), IMPLANT (имплант), EXTRACTED (зуб отсутствует), OBSERVATION (нужно понаблюдать: очаг, расширение щели и т.п.), или null.
+- "confidence" — "низкая", "средняя" или "высокая".
+- Здоровые зубы без находок не перечисляй. Ничего не выдумывай: если снимок нечёткий, верни одну находку с "tooth": null и описанием проблемы.
+- Ответ — ТОЛЬКО JSON-массив, без пояснений, например:
+[{"tooth":36,"text":"признаки кариеса на жевательной поверхности","status":"CARIES","confidence":"средняя"},{"tooth":46,"text":"очаг разрежения у верхушки медиального корня","status":"OBSERVATION","confidence":"низкая"}]`;
+
+/** Разбирает ответ модели. Если JSON не получился — весь текст становится одной находкой. */
+export function parseFindings(raw: string): Finding[] {
+  const m = raw.match(/\[[\s\S]*\]/);
+  if (m) {
+    try {
+      const arr = JSON.parse(m[0]) as Record<string, unknown>[];
+      if (Array.isArray(arr)) {
+        return arr
+          .map((x) => {
+            const t = Number(x.tooth);
+            const status = typeof x.status === "string" && (AI_STATUSES as readonly string[]).includes(x.status) ? x.status : null;
+            return {
+              tooth: Number.isInteger(t) && t >= 11 && t <= 48 ? t : null,
+              text: String(x.text ?? x.finding ?? "").trim().slice(0, 500),
+              status,
+              confidence: typeof x.confidence === "string" ? x.confidence.slice(0, 20) : null,
+            };
+          })
+          .filter((f) => f.text)
+          .slice(0, 32);
+      }
+    } catch {
+      /* ниже — запасной вариант */
+    }
+  }
+  const text = raw.replace(/```(json)?/g, "").trim().slice(0, 1000);
+  return text ? [{ tooth: null, text, status: null, confidence: null }] : [];
+}
+
+/** Отправляет скриншот в ГигаЧат и возвращает список находок по зубам. Картинка нигде не сохраняется. */
+export async function analyzeCtImage(image: Buffer): Promise<Finding[]> {
   const key = await getGigachatKey();
   if (!key) throw new AiError("Не указан ключ ГигаЧата. Его вводят в разделе «Ещё → ИИ для КТ».");
   const token = await getToken(key);
 
-  // 1. Загружаем картинку во временное хранилище ГигаЧата
+  // 1. Временно загружаем картинку в ГигаЧат (ниже сразу удаляем)
   const fd = new FormData();
   fd.append("file", new Blob([new Uint8Array(image)], { type: "image/jpeg" }), "ct.jpg");
   fd.append("purpose", "general");
@@ -102,10 +137,6 @@ export async function analyzeCtImage(image: Buffer, toothNumber: number | null):
   const fileId = ((await up.json()) as { id: string }).id;
 
   try {
-    const question = toothNumber
-      ? `На снимке зуб ${toothNumber} (и, возможно, соседние). Что видно?`
-      : "Что видно на этом снимке по зубам?";
-
     // 2. Спрашиваем модель (если основная недоступна — запасная)
     let lastStatus = 0;
     for (const model of MODELS) {
@@ -115,10 +146,10 @@ export async function analyzeCtImage(image: Buffer, toothNumber: number | null):
         body: JSON.stringify({
           model,
           temperature: 0.1,
-          max_tokens: 600,
+          max_tokens: 1500,
           messages: [
             { role: "system", content: SYSTEM_PROMPT },
-            { role: "user", content: question, attachments: [fileId] },
+            { role: "user", content: "Перечисли находки по зубам на этом снимке.", attachments: [fileId] },
           ],
         }),
       });
@@ -126,19 +157,19 @@ export async function analyzeCtImage(image: Buffer, toothNumber: number | null):
         const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
         const text = data.choices?.[0]?.message?.content?.trim();
         if (!text) throw new AiError("ГигаЧат вернул пустой ответ. Попробуйте ещё раз.");
-        return text.slice(0, 3000);
+        return parseFindings(text);
       }
       lastStatus = res.status;
       if (res.status === 401) {
         cached = null;
-        throw new AiError("Доступ к ГигаЧату истёк. Нажмите «Повторить».");
+        throw new AiError("Доступ к ГигаЧату истёк. Отправьте ещё раз.");
       }
       if (res.status === 402) throw new AiError("Закончились бесплатные токены ГигаЧата. Их можно докупить на developers.sber.ru.");
-      if (res.status === 429) throw new AiError("Слишком много запросов. Подождите минуту и нажмите «Повторить».");
+      if (res.status === 429) throw new AiError("Слишком много запросов. Подождите минуту и отправьте ещё раз.");
     }
     throw new AiError(`ГигаЧат не ответил (код ${lastStatus}). Попробуйте позже.`);
   } finally {
-    // 3. Удаляем картинку из хранилища ГигаЧата — там она больше не нужна
+    // 3. Удаляем картинку из хранилища ГигаЧата
     api(`/files/${fileId}/delete`, token, { method: "POST" }).catch(() => {});
   }
 }

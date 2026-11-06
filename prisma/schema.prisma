@@ -88,6 +88,7 @@ model Patient {
   prices         PatientPrice[]
   files          PatientFile[]
   ctNotes        CtNote[]
+  ctFindings     CtFinding[]
 
   @@index([lastName, firstName])
   @@index([phone])
@@ -290,8 +291,24 @@ model PatientFile {
   @@index([patientId])
 }
 
-// ───────────── КТ: подсказка ИИ (черновик, НЕ диагноз) + заключение врача ─────────────
+// ───────────── КТ: находки ИИ, ждущие решения врача ─────────────
+// Картинки НЕ хранятся: скриншоты сразу уходят в ИИ, сохраняется только короткий текст.
+// Подтверждённая находка записывается в карту зуба и удаляется отсюда, отклонённая — просто удаляется.
 
+model CtFinding {
+  id          String   @id @default(cuid())
+  patientId   String
+  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  toothNumber Int? // номер зуба, который определил ИИ (врач может исправить)
+  text        String
+  status      String? // предлагаемое состояние зуба: CARIES, FILLING, CROWN, IMPLANT, EXTRACTED…
+  confidence  String? // низкая / средняя / высокая
+  createdAt   DateTime @default(now())
+
+  @@index([patientId])
+}
+
+// Устарело (первая версия с сохранением картинок), не используется. Оставлено, чтобы обновление не трогало базу.
 model CtNote {
   id          String      @id @default(cuid())
   patientId   String
