@@ -89,37 +89,53 @@ const SYSTEM_PROMPT = `Ты помощник врача-стоматолога. 
 - Отмечай: признаки кариеса, пломбы, коронки, импланты, штифты, леченые/нелеченые каналы, расширение периодонтальной щели, очаги у верхушек корней, убыль кости, отсутствующие и ретинированные зубы.
 - "status" — одно из: CARIES (кариес), FILLING (пломба), CROWN (коронка), IMPLANT (имплант), EXTRACTED (зуб отсутствует), OBSERVATION (нужно понаблюдать: очаг, расширение щели и т.п.), или null.
 - "confidence" — "низкая", "средняя" или "высокая".
-- Здоровые зубы без находок не перечисляй. Ничего не выдумывай: если снимок нечёткий, верни одну находку с "tooth": null и описанием проблемы.
+- Обязательно перечисли все видимые пломбы, коронки, импланты, леченые каналы и отсутствующие зубы, даже если они в порядке. Полностью здоровые зубы без изменений не перечисляй.
+- Ничего не выдумывай. Если снимок нечёткий или ты не видишь зубов — верни одну находку с "tooth": null и опиши, что видишь. Пустой массив не возвращай.
 - Ответ — ТОЛЬКО JSON-массив, без пояснений, например:
 [{"tooth":36,"text":"признаки кариеса на жевательной поверхности","status":"CARIES","confidence":"средняя"},{"tooth":46,"text":"очаг разрежения у верхушки медиального корня","status":"OBSERVATION","confidence":"низкая"}]`;
 
-/** Разбирает ответ модели. Если JSON не получился — весь текст становится одной находкой. */
+/** Берёт первое непустое строковое поле из списка возможных названий */
+function pickText(x: Record<string, unknown>): string {
+  for (const k of ["text", "finding", "description", "находка", "описание", "comment", "note"]) {
+    if (typeof x[k] === "string" && (x[k] as string).trim()) return (x[k] as string).trim();
+  }
+  // запасной вариант — любое строковое поле, кроме служебных
+  for (const [k, v] of Object.entries(x)) {
+    if (typeof v === "string" && v.trim().length > 3 && !["status", "confidence", "уверенность"].includes(k)) return v.trim();
+  }
+  return "";
+}
+
+/** Разбирает ответ модели. Если находок не получилось — весь ответ ИИ становится одной находкой, чтобы врач его увидел. */
 export function parseFindings(raw: string): Finding[] {
   const m = raw.match(/\[[\s\S]*\]/);
   if (m) {
     try {
       const arr = JSON.parse(m[0]) as Record<string, unknown>[];
       if (Array.isArray(arr)) {
-        return arr
+        const out = arr
+          .filter((x) => x && typeof x === "object")
           .map((x) => {
-            const t = Number(x.tooth);
-            const status = typeof x.status === "string" && (AI_STATUSES as readonly string[]).includes(x.status) ? x.status : null;
+            const t = Number(x.tooth ?? x["зуб"] ?? x.number);
+            const st = typeof x.status === "string" ? x.status.toUpperCase() : "";
             return {
               tooth: Number.isInteger(t) && t >= 11 && t <= 48 ? t : null,
-              text: String(x.text ?? x.finding ?? "").trim().slice(0, 500),
-              status,
+              text: pickText(x).slice(0, 500),
+              status: (AI_STATUSES as readonly string[]).includes(st) ? st : null,
               confidence: typeof x.confidence === "string" ? x.confidence.slice(0, 20) : null,
             };
           })
           .filter((f) => f.text)
           .slice(0, 32);
+        if (out.length) return out;
       }
     } catch {
       /* ниже — запасной вариант */
     }
   }
-  const text = raw.replace(/```(json)?/g, "").trim().slice(0, 1000);
-  return text ? [{ tooth: null, text, status: null, confidence: null }] : [];
+  const text = raw.replace(/```(json)?/g, "").trim();
+  const shown = !text || text === "[]" ? "ИИ не нашёл на снимке ничего, о чём стоит сообщить." : `Ответ ИИ: ${text}`;
+  return [{ tooth: null, text: shown.slice(0, 1000), status: null, confidence: null }];
 }
 
 /** Отправляет скриншот в ГигаЧат и возвращает список находок по зубам. Картинка нигде не сохраняется. */
@@ -157,6 +173,7 @@ export async function analyzeCtImage(image: Buffer): Promise<Finding[]> {
         const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
         const text = data.choices?.[0]?.message?.content?.trim();
         if (!text) throw new AiError("ГигаЧат вернул пустой ответ. Попробуйте ещё раз.");
+        console.log(`[КТ] ответ ${model}:`, text.slice(0, 2000));
         return parseFindings(text);
       }
       lastStatus = res.status;
