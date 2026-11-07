@@ -47,10 +47,11 @@ export function buildStages<T extends Item>(items: T[]): Stage<T>[] {
   let visitNo = 0;
   for (const key of [...byStage.keys()].sort((a, b) => a - b)) {
     const list = byStage.get(key)!;
-    // Зубы с пульпитом/периодонтитом на 3–4 канала лечатся в два отдельных приёма
+    // Зуб с пульпитом/периодонтитом — всегда отдельно и в два приёма:
+    // 1-й приём — лечение каналов, 2-й — реставрация. С кариесом других зубов не совмещается.
     const twoVisit = new Set(
       list
-        .filter((i) => i.toothNumber !== null && /пульпит|периодонт|канал/i.test(i.treatment) && !/реставрац/i.test(i.treatment) && (canals(i.treatment) ?? 0) >= 3)
+        .filter((i) => i.toothNumber !== null && /пульпит|периодонт|канал/i.test(i.treatment) && !/реставрац/i.test(i.treatment))
         .map((i) => i.toothNumber as number),
     );
     // Коронки, разделённые на приёмы («— 1-й приём» …): каждый приём отдельно, соседние зубы вместе
@@ -105,7 +106,6 @@ export function buildStages<T extends Item>(items: T[]): Stage<T>[] {
           total: 0,
           teeth: g,
           items: list.filter((i) => i.toothNumber !== null && g.includes(i.toothNumber) && (part(i.treatment) === p || (p === parts[0] && part(i.treatment) === null))),
-          label: `коронка, ${p}-й приём`,
         });
       }
     }
@@ -113,8 +113,8 @@ export function buildStages<T extends Item>(items: T[]): Stage<T>[] {
       const own = list.filter((i) => i.toothNumber === t);
       const endo = own.filter((i) => /пульпит|периодонт|канал/i.test(i.treatment) && !/реставрац/i.test(i.treatment));
       const rest = own.filter((i) => !endo.includes(i));
-      visits.push({ n: 0, teeth: [t], items: endo, label: "лечение каналов, 1-й приём", total: 0 });
-      visits.push({ n: 0, teeth: [t], items: rest, label: "лечение каналов, 2-й приём (пломбировка, реставрация)", total: 0 });
+      visits.push({ n: 0, teeth: [t], items: endo, total: 0 });
+      if (rest.length) visits.push({ n: 0, teeth: [t], items: rest, total: 0 });
     }
     visits.sort((a, b) => pos(a.teeth[0] ?? null) - pos(b.teeth[0] ?? null));
     const noTooth = list.filter((i) => i.toothNumber === null);
