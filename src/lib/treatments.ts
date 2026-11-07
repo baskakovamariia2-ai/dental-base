@@ -6,7 +6,10 @@ export const TREATMENT_TYPES = [
   "Пульпит — 2 канала",
   "Пульпит — 3 канала",
   "Пульпит — 4 канала",
-  "Периодонтит",
+  "Периодонтит — 1 канал",
+  "Периодонтит — 2 канала",
+  "Периодонтит — 3 канала",
+  "Периодонтит — 4 канала",
   "Коронка цирконий",
   "Коронка стеклокерамика",
   "Имплант",
@@ -28,6 +31,21 @@ export function canalCount(name: string): number | null {
   return /^\d$/.test(m[1]) ? Number(m[1]) : CANAL_NUM[m[1].toLowerCase()] ?? null;
 }
 
+export const FOUR_CANAL_PRICE = 15000;
+export const FOUR_CANAL_NOTE = "скидка 5 000 ₽";
+export const ENDO_RESTORATION = "Реставрация после лечения каналов";
+export const DEFAULT_RESTORATION_PRICE = 6000;
+
+/** Пульпит / периодонтит / лечение каналов */
+export function isEndo(treatment: string) {
+  return /пульпит|периодонт|канал/i.test(treatment) && !/реставрац/i.test(treatment);
+}
+
+/** Цена реставрации после лечения каналов: из прайса пациента, иначе 6 000 ₽ */
+export function restorationPrice(items: { name: string; price: number }[]) {
+  return findPrice("Реставрация (кариес)", items) ?? DEFAULT_RESTORATION_PRICE;
+}
+
 /** Подбор цены по прайсу пациента */
 export function findPrice(treatment: string, items: { name: string; price: number }[]): number | null {
   const t = treatment.toLowerCase();
@@ -35,8 +53,9 @@ export function findPrice(treatment: string, items: { name: string; price: numbe
   const exact = low.find((i) => i.n === t);
   if (exact) return exact.price;
 
-  if (/пульпит|периодонт|канал/.test(t)) {
+  if (/пульпит|периодонт|канал/.test(t) && !/реставрац/.test(t)) {
     const n = canalCount(t);
+    if (n === 4) return FOUR_CANAL_PRICE; // 4-канальный зуб — фиксированная цена со скидкой
     if (n !== null) {
       const hit = low.find((i) => canalCount(i.n) === n);
       if (hit) return hit.price;

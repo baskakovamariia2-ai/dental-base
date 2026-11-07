@@ -7,7 +7,7 @@ import { optStr, oneOf } from "@/lib/forms";
 import { TOOTH_STATUS, values } from "@/lib/labels";
 import { isValidTooth } from "@/lib/teeth";
 import { findPrice, type DictatedItem } from "@/lib/dictation";
-import { priceItemsFor, syncToothWithPlan } from "@/lib/plan";
+import { applyEndoRules, priceItemsFor, syncToothWithPlan } from "@/lib/plan";
 
 /** Состояние зуба и заметка. Лечение и цены — в плане лечения. */
 export async function saveTooth(patientId: string, number: number, formData: FormData) {
@@ -64,6 +64,7 @@ export async function applyDictation(patientId: string, payload: string) {
       if (tooth !== null) touched.add(tooth);
     }
   }
+  await applyEndoRules(patientId);
   for (const t of touched) await syncToothWithPlan(patientId, t);
   revalidatePath(`/patients/${patientId}`);
 }

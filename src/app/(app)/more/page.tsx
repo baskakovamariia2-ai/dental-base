@@ -4,8 +4,6 @@ import { requireUser } from "@/lib/auth";
 import { logout, changePassword } from "@/actions/auth";
 import { addUser, clearDemo, seedDemo, toggleUserActive } from "@/actions/admin";
 import { saveReminderTemplate, saveSettings } from "@/actions/settings";
-import { checkGigachatKey, saveCtPrompt, saveGigachatKey } from "@/actions/ct";
-import { getCtPrompt, getGigachatKey } from "@/lib/gigachat";
 import { getReminderTemplate } from "@/lib/reminder";
 import { getSettings } from "@/lib/settings";
 import { ConfirmButton } from "@/components/auto-submit";
@@ -24,14 +22,6 @@ const USERMSG: Record<string, [string, string]> = {
   invalid: ["Заполните имя, email и пароль от 10 символов", "bg-rose-50 text-rose-700"],
 };
 
-const AIMSG: Record<string, [string, string]> = {
-  ok: ["Ключ работает — ИИ подключён ✓", "bg-emerald-50 text-emerald-700"],
-  bad: ["Ключ не подходит. Скопируйте «Ключ авторизации» целиком и вставьте ещё раз.", "bg-rose-50 text-rose-700"],
-  net: ["Ключ сохранён, но связаться с ГигаЧатом не удалось. Нажмите «Проверить» через пару минут.", "bg-amber-50 text-amber-800"],
-  empty: ["Вставьте ключ", "bg-rose-50 text-rose-700"],
-  removed: ["Ключ удалён, ИИ отключён", "bg-zinc-100 text-zinc-700"],
-  prompt: ["Инструкция для ИИ сохранена", "bg-emerald-50 text-emerald-700"],
-};
 
 export default async function MorePage({ searchParams }: { searchParams: Promise<{ pw?: string; user?: string; welcome?: string; tpl?: string; ai?: string }> }) {
   const me = await requireUser();
@@ -39,8 +29,6 @@ export default async function MorePage({ searchParams }: { searchParams: Promise
   const isOwner = me.role === "OWNER";
   const tpl = await getReminderTemplate();
   const settings = await getSettings();
-  const aiKey = isOwner ? await getGigachatKey() : null;
-  const ctPrompt = await getCtPrompt();
   const [users, demoCount] = await Promise.all([
     isOwner ? prisma.user.findMany({ orderBy: { createdAt: "asc" } }) : Promise.resolve([]),
     prisma.patient.count({ where: { isDemo: true } }),
@@ -113,49 +101,6 @@ export default async function MorePage({ searchParams }: { searchParams: Promise
         </section>
       )}
 
-      {isOwner && (
-        <section id="ai">
-          <h2 className="section-title">ИИ для КТ (ГигаЧат)</h2>
-          {sp.ai && AIMSG[sp.ai] && <p className={`mb-3 rounded-xl px-3 py-2.5 text-sm ${AIMSG[sp.ai][1]}`}>{AIMSG[sp.ai][0]}</p>}
-          <div className="card card-pad space-y-3">
-            <p className="text-sm text-ink-soft">
-              {aiKey ? <>Ключ сохранён: <b>…{aiKey.slice(-4)}</b>. На вкладке «КТ» в карточке пациента можно отправлять скриншоты ИИ.</> : "ИИ даёт врачу короткую подсказку по срезам КТ. Для этого нужен бесплатный ключ ГигаЧата."}
-            </p>
-            {!aiKey && (
-              <ol className="list-decimal space-y-1 pl-5 text-sm text-ink-soft">
-                <li>Откройте <a href="https://developers.sber.ru/studio" target="_blank" rel="noopener noreferrer" className="text-accent">developers.sber.ru/studio</a> и войдите через Сбер ID.</li>
-                <li>Создайте проект <b>GigaChat API</b> (для физических лиц).</li>
-                <li>В настройках проекта нажмите «Получить ключ» и скопируйте <b>Ключ авторизации</b>.</li>
-                <li>Вставьте его ниже и нажмите «Сохранить».</li>
-              </ol>
-            )}
-            <form action={saveGigachatKey} className="flex flex-wrap items-end gap-2">
-              <label className="block min-w-0 flex-1"><span className="label">{aiKey ? "Новый ключ (если нужно заменить)" : "Ключ авторизации"}</span><input name="key" type="password" autoComplete="off" className="input" /></label>
-              <button className="btn-primary">Сохранить</button>
-            </form>
-            {aiKey && (
-              <div className="flex flex-wrap gap-2">
-                <form action={checkGigachatKey}><button className="btn-secondary btn-sm">Проверить</button></form>
-                <form action={saveGigachatKey}><input type="hidden" name="remove" value="1" /><ConfirmButton message="Удалить ключ и отключить ИИ?" className="btn-ghost btn-sm">Удалить ключ</ConfirmButton></form>
-              </div>
-            )}
-            {aiKey && (
-              <details className="rounded-xl bg-zinc-50 p-3" open={sp.ai === "prompt"}>
-                <summary className="cursor-pointer list-none text-sm font-medium">✏️ Инструкция для ИИ {ctPrompt.custom ? "(изменена)" : "(стандартная)"}</summary>
-                <form action={saveCtPrompt} className="mt-3 space-y-2">
-                  <p className="text-xs text-ink-mute">Что ИИ должен искать на снимке. Пишите обычным языком, например: «обращай особое внимание на кариес под пломбами». Формат ответа (по строке на зуб) программа добавляет сама.</p>
-                  <textarea name="prompt" rows={12} defaultValue={ctPrompt.value} className="input text-[14px]" />
-                  <div className="flex flex-wrap gap-2">
-                    <button className="btn-primary btn-sm">Сохранить</button>
-                    {ctPrompt.custom && <button name="reset" value="1" className="btn-ghost btn-sm">Вернуть исходную</button>}
-                  </div>
-                </form>
-              </details>
-            )}
-            <p className="text-xs text-ink-mute">В ГигаЧат уходит только картинка, без ФИО, и сразу удаляется оттуда. У нас картинки не сохраняются.</p>
-          </div>
-        </section>
-      )}
 
       <section>
         <h2 className="section-title">Врач в плане лечения</h2>

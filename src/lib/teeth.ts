@@ -19,22 +19,35 @@ export function toothKind(n: number): ToothKind {
 }
 export const isUpper = (n: number) => Math.floor(n / 10) === 1 || Math.floor(n / 10) === 2;
 
-// Четыре понятные группы, как на схеме: проблемные / леченые / здоровые / отсутствующие
-export type ToothCategory = "problem" | "treated" | "healthy" | "missing";
+// Группы для схемы зубов (как на образце): кариес — зелёный квадратик, пульпит/периодонтит — полоска по каналам,
+// под удаление — красный крестик, здоровые — белые.
+export type ToothCategory = "extract" | "endo" | "caries" | "problem" | "treated" | "healthy" | "missing";
 
-export function toothCategory(status: ToothStatus, hasOpenPlan: boolean): ToothCategory {
-  if (status === "EXTRACTED") return hasOpenPlan ? "problem" : "missing";
-  if (hasOpenPlan || status === "CARIES" || status === "PLANNED" || status === "IN_TREATMENT") return "problem";
+const RE_EXTRACT = /удален/i;
+const RE_ENDO = /пульпит|периодонт|канал/i;
+const RE_CARIES = /реставрац|кариес|пломб/i;
+
+export function toothCategory(status: ToothStatus, openTreatments: string[]): ToothCategory {
+  if (openTreatments.some((t) => RE_EXTRACT.test(t))) return "extract";
+  if (openTreatments.some((t) => RE_ENDO.test(t) && !/реставрац/i.test(t))) return "endo";
+  if (openTreatments.some((t) => RE_CARIES.test(t)) || status === "CARIES") return "caries";
+  if (openTreatments.length || status === "PLANNED" || status === "IN_TREATMENT") return "problem";
+  if (status === "EXTRACTED") return "missing";
   if (status === "FILLING" || status === "TREATED" || status === "CROWN" || status === "IMPLANT") return "treated";
   return "healthy";
 }
 
 export const CATEGORY_STYLE: Record<ToothCategory, { label: string; fill: string; stroke: string; bg: string }> = {
-  problem: { label: "Проблемные", fill: "#E8384F", stroke: "#E8384F", bg: "#FCE4E8" },
+  caries: { label: "Кариес зуба", fill: "#FFFFFF", stroke: "#52525B", bg: "transparent" },
+  endo: { label: "Пульпит зуба (периодонтит)", fill: "#FFFFFF", stroke: "#52525B", bg: "#E0F5F4" },
+  extract: { label: "Рекомендовано к удалению", fill: "#FFFFFF", stroke: "#52525B", bg: "#FCE4E8" },
+  problem: { label: "Коронка / имплант", fill: "#FFFFFF", stroke: "#E8384F", bg: "#FCE4E8" },
   treated: { label: "Вылеченные", fill: "#7C5CFA", stroke: "#7C5CFA", bg: "#E6E1FD" },
-  healthy: { label: "Здоровые", fill: "#FFFFFF", stroke: "#C4C7CE", bg: "transparent" },
-  missing: { label: "Отсутствующие", fill: "#F4F4F5", stroke: "#D4D4D8", bg: "transparent" },
+  healthy: { label: "Здоровые", fill: "#FFFFFF", stroke: "#52525B", bg: "transparent" },
+  missing: { label: "Отсутствует", fill: "#F4F4F5", stroke: "#D4D4D8", bg: "transparent" },
 };
+
+export const COLOR = { caries: "#7CB342", endo: "#4DC3BE", cross: "#E53935" };
 
 /** Общая ситуация пациента: считается из схемы и плана, отдельно не хранится */
 export function patientStats(
@@ -42,24 +55,20 @@ export function patientStats(
   plan: { toothNumber: number | null; treatment: string; status: string }[],
 ) {
   const open = plan.filter((p) => p.status === "PLANNED" || p.status === "IN_PROGRESS");
-  const count = (re: RegExp) => open.filter((p) => re.test(p.treatment.toLowerCase())).length;
-  const openTeeth = new Set(open.map((p) => p.toothNumber).filter((n): n is number => n !== null));
+  const count = (fn: (t: string) => boolean) => open.filter((p) => fn(p.treatment)).length;
   const byNumber = new Map(teeth.map((t) => [t.number, t.status]));
-  let problem = 0, treated = 0, missing = 0;
+  const cats: Record<ToothCategory, number> = { extract: 0, endo: 0, caries: 0, problem: 0, treated: 0, healthy: 0, missing: 0 };
   for (const n of ALL_TEETH) {
-    const c = toothCategory(byNumber.get(n) ?? "HEALTHY", openTeeth.has(n));
-    if (c === "problem") problem++;
-    if (c === "treated") treated++;
-    if (c === "missing") missing++;
+    const tr = open.filter((p) => p.toothNumber === n).map((p) => p.treatment);
+    cats[toothCategory(byNumber.get(n) ?? "HEALTHY", tr)]++;
   }
   return {
-    caries: count(/реставрац|кариес|пломб/),
-    canals: count(/пульпит|канал/) - count(/периодонт.*канал|канал.*периодонт/),
-    periodontitis: count(/периодонт/),
-    extraction: count(/удален/),
-    crowns: count(/коронк/),
-    problem,
-    treated,
-    missing,
+    caries: count((t) => RE_CARIES.test(t) && !/после лечения каналов/i.test(t)),
+    endo: count((t) => RE_ENDO.test(t) && !/реставрац/i.test(t)),
+    extraction: count((t) => RE_EXTRACT.test(t)),
+    crowns: count((t) => /коронк/i.test(t)),
+    problem: cats.extract + cats.endo + cats.caries + cats.problem,
+    treated: cats.treated,
+    missing: cats.missing,
   };
 }

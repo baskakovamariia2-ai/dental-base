@@ -26,8 +26,7 @@ export default async function PrintPlanPage({ params }: { params: Promise<{ id: 
   const items = patient.treatmentItems.filter((i) => i.status === "PLANNED" || i.status === "IN_PROGRESS");
   const total = items.reduce((s, i) => s + i.price, 0);
   const statusOf = new Map<number, ToothStatus>(patient.teeth.map((t) => [t.number, t.status] as [number, ToothStatus]));
-  const openTeeth = new Set(items.map((i) => i.toothNumber).filter((n): n is number => n !== null));
-  const cat = (n: number) => toothCategory(statusOf.get(n) ?? "HEALTHY", openTeeth.has(n));
+  const cat = (n: number) => toothCategory(statusOf.get(n) ?? "HEALTHY", items.filter((i) => i.toothNumber === n).map((i) => i.treatment));
 
   const Row = ({ list }: { list: number[] }) => (
     <div className="grid grid-cols-[repeat(16,minmax(0,1fr))] gap-[3px]">
@@ -60,7 +59,7 @@ export default async function PrintPlanPage({ params }: { params: Promise<{ id: 
             <Row list={UPPER} />
             <Row list={LOWER} />
           </div>
-          <div className="mt-4"><CategoryLegend small /></div>
+          <div className="mt-4"><CategoryLegend small present={new Set([...UPPER, ...LOWER].map(cat))} /></div>
         </section>
 
         {items.length === 0 ? (
@@ -76,7 +75,7 @@ export default async function PrintPlanPage({ params }: { params: Promise<{ id: 
                 {st.visits.map((v) => (
                   <div key={v.n} className="mb-2">
                     <div className="py-1 text-[12px] font-medium uppercase tracking-wide text-zinc-400">
-                      Приём {v.n}{v.teeth.length ? ` · ${v.teeth.length > 1 ? "зубы" : "зуб"} ${v.teeth.join(", ")}` : ""}
+                      Приём {v.n}{v.teeth.length ? ` · ${v.teeth.length > 1 ? "зубы" : "зуб"} ${v.teeth.join(", ")}` : ""}{v.label ? ` · ${v.label}` : ""}
                     </div>
                     <table className="w-full border-collapse text-[14px]">
                       <tbody>

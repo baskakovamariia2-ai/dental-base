@@ -20,7 +20,7 @@ export function Odontogram({ patientId, teeth, plan, prices }: { patientId: stri
   const map = new Map(teeth.map((t) => [t.number, t]));
   const get = (n: number): ToothData => map.get(n) ?? { number: n, status: "HEALTHY", notes: null };
   const planFor = (n: number) => plan.filter((p) => p.toothNumber === n && p.status !== "CANCELLED");
-  const cat = (n: number) => toothCategory(get(n).status, planFor(n).some((p) => OPEN(p.status)));
+  const cat = (n: number) => toothCategory(get(n).status, planFor(n).filter((p) => OPEN(p.status)).map((p) => p.treatment));
 
   const Jaw = ({ list }: { list: number[] }) => (
     <div className="grid grid-cols-8 gap-1 sm:grid-cols-[repeat(16,minmax(0,1fr))]">
@@ -44,7 +44,7 @@ export function Odontogram({ patientId, teeth, plan, prices }: { patientId: stri
       <div className="card card-pad space-y-2">
         <Jaw list={UPPER} />
         <Jaw list={LOWER} />
-        <div className="pt-2"><CategoryLegend /></div>
+        <div className="pt-2"><CategoryLegend present={new Set([...UPPER, ...LOWER].map(cat))} /></div>
       </div>
       {current && (
         <ToothSheet key={current.number} patientId={patientId} tooth={current} category={cat(current.number)} plan={planFor(current.number)} prices={prices} onClose={() => setOpen(null)} />
@@ -55,11 +55,11 @@ export function Odontogram({ patientId, teeth, plan, prices }: { patientId: stri
 
 const CHOICES: { cat: ToothCategory; status: ToothStatus }[] = [
   { cat: "healthy", status: "HEALTHY" },
-  { cat: "problem", status: "CARIES" },
+  { cat: "caries", status: "CARIES" },
   { cat: "treated", status: "TREATED" },
   { cat: "missing", status: "EXTRACTED" },
 ];
-const CHOICE_LABEL: Record<ToothCategory, string> = { healthy: "Здоровый", problem: "Проблемный", treated: "Вылеченный", missing: "Отсутствует" };
+const CHOICE_LABEL: Partial<Record<ToothCategory, string>> = { healthy: "Здоровый", caries: "Кариес", treated: "Вылеченный", missing: "Отсутствует" };
 
 function ToothSheet({
   patientId, tooth, category, plan, prices, onClose,
@@ -142,8 +142,10 @@ function ToothSheet({
                 }`}
                 style={{ background: CATEGORY_STYLE[c.cat].bg === "transparent" ? "#fff" : CATEGORY_STYLE[c.cat].bg }}
               >
-                {c.cat === "missing" ? <span className="font-bold text-[#E8384F]">✕</span> : (
-                  <span className="h-3 w-3 rounded-full" style={{ background: CATEGORY_STYLE[c.cat].fill, boxShadow: c.cat === "healthy" ? "inset 0 0 0 2px #18181b" : undefined }} />
+                {c.cat === "missing" ? <span className="inline-block h-3 w-3 rounded-full border border-dashed border-zinc-400" /> : c.cat === "caries" ? (
+                  <span className="h-3 w-3 rounded-[3px]" style={{ background: "#7CB342" }} />
+                ) : (
+                  <span className="h-3 w-3 rounded-full" style={{ background: CATEGORY_STYLE[c.cat].fill, boxShadow: c.cat === "healthy" ? "inset 0 0 0 2px #52525B" : undefined }} />
                 )}
                 {CHOICE_LABEL[c.cat]}
               </button>

@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { patientStats, ALL_TEETH } from "@/lib/teeth";
 import { getReminderTemplate, reminderText } from "@/lib/reminder";
-import { fillMissingPrices } from "@/lib/plan";
+import { applyEndoRules, fillMissingPrices } from "@/lib/plan";
 import { getSettings } from "@/lib/settings";
 import { buildStages } from "@/lib/stages";
 import { ReminderButton } from "@/components/reminder-button";
@@ -18,9 +18,6 @@ import { AutoSubmitSelect, ConfirmButton } from "@/components/auto-submit";
 import { Odontogram, type PriceOption } from "@/components/odontogram";
 import { DictationBox } from "@/components/dictation";
 import { FileUpload } from "@/components/file-upload";
-import { CtUpload } from "@/components/ct-upload";
-import { confirmFinding, rejectAllFindings, rejectFinding } from "@/actions/ct";
-import { AI_STATUSES, getGigachatKey } from "@/lib/gigachat";
 import { TreatmentFields } from "@/components/price-picker";
 import { Badge, Empty, Field, Stat } from "@/components/ui";
 import { IconBack, IconCalendar, IconPhone, IconPlus, IconTooth } from "@/components/icons";
@@ -30,7 +27,6 @@ const TABS = [
   { key: "treatment", label: "Лечение" },
   { key: "plan", label: "План" },
   { key: "history", label: "История" },
-  { key: "ct", label: "КТ" },
   { key: "files", label: "Файлы" },
   { key: "prices", label: "Прайс" },
 ];
@@ -47,6 +43,7 @@ export default async function PatientPage({
   const { tab = "overview" } = await searchParams;
   const now = new Date();
   // цены из прайса подставляются в план автоматически (где цена ещё не указана)
+  await applyEndoRules(id);
   await fillMissingPrices({ patientIds: [id] });
 
   const patient = await prisma.patient.findUnique({
@@ -57,7 +54,6 @@ export default async function PatientPage({
       priceList: { include: { items: { orderBy: { sortOrder: "asc" } } } },
       visits: { orderBy: { date: "desc" }, include: { doctor: true } },
       files: { orderBy: [{ date: "desc" }, { createdAt: "desc" }] },
-      ctFindings: { orderBy: [{ toothNumber: "asc" }, { createdAt: "asc" }] },
       appointments: {
         where: { startsAt: { gte: now }, status: { notIn: ["CANCELLED", "NO_SHOW", "DONE"] } },
         orderBy: { startsAt: "asc" },
@@ -70,7 +66,7 @@ export default async function PatientPage({
   const priceLists = await prisma.priceList.findMany({ orderBy: { createdAt: "asc" }, include: { items: { orderBy: { sortOrder: "asc" } } } });
   const effectiveList = patient.priceList ?? priceLists.find((l) => l.isDefault) ?? null;
   const priceOptions: PriceOption[] = (effectiveList?.items ?? []).map((i) => ({ name: i.name, price: i.price }));
-  const [tpl, settings, aiKey] = await Promise.all([getReminderTemplate(), getSettings(), getGigachatKey()]);
+  const [tpl, settings] = await Promise.all([getReminderTemplate(), getSettings()]);
 
   const stats = patientStats(patient.teeth, patient.treatmentItems);
   const st = findOpt(PATIENT_STATUS, patient.status);
@@ -145,7 +141,6 @@ export default async function PatientPage({
           >
             {t.label}
             {t.key === "plan" && openItems > 0 && <span className="ml-1 text-xs text-orange-600">{openItems}</span>}
-            {t.key === "ct" && patient.ctFindings.length > 0 && <span className="ml-1 text-xs text-orange-600">{patient.ctFindings.length}</span>}
             {t.key === "files" && patient.files.length > 0 && <span className="ml-1 text-xs text-ink-mute">{patient.files.length}</span>}
           </Link>
         ))}
@@ -213,8 +208,7 @@ export default async function PatientPage({
             <h2 className="section-title">Общая ситуация</h2>
             <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
               <Stat label="Кариес (реставрация)" value={stats.caries} />
-              <Stat label="Лечение каналов" value={stats.canals} />
-              <Stat label="Периодонтит" value={stats.periodontitis} />
+              <Stat label="Пульпит (периодонтит)" value={stats.endo} />
               <Stat label="Под удаление" value={stats.extraction} />
               <Stat label="Коронки" value={stats.crowns} />
               <Stat label="Проблемных зубов" value={stats.problem} />
@@ -249,7 +243,7 @@ export default async function PatientPage({
                     {st.visits.map((v) => (
                       <div key={v.n}>
                         <div className="bg-zinc-50 px-4 py-1.5 text-xs font-medium text-ink-soft">
-                          Приём {v.n}{v.teeth.length ? ` · ${v.teeth.length > 1 ? "зубы" : "зуб"} ${v.teeth.join(", ")}` : ""}
+                          Приём {v.n}{v.teeth.length ? ` · ${v.teeth.length > 1 ? "зубы" : "зуб"} ${v.teeth.join(", ")}` : ""}{v.label ? ` · ${v.label}` : ""}
                         </div>
                         {v.items.map((i) => (
                     <div key={i.id} className={`px-4 py-3 ${i.status === "CANCELLED" ? "opacity-50" : ""}`}>
@@ -351,61 +345,6 @@ export default async function PatientPage({
               </dl>
             </article>
           ))}
-        </div>
-      )}
-
-      {tab === "ct" && (
-        <div className="space-y-4">
-          <CtUpload patientId={patient.id} hasKey={!!aiKey} />
-          {links.length > 0 && (
-            <p className="px-1 text-sm text-ink-soft">
-              КТ пациента в Telegram:{" "}
-              {links.map((f, i) => (
-                <span key={f.id}>{i > 0 && ", "}<a href={f.url!} target="_blank" rel="noopener noreferrer" className="text-[#229ED9]">{f.title}</a></span>
-              ))}
-            </p>
-          )}
-          {patient.ctFindings.length > 0 && (
-            <section>
-              <div className="mb-2 flex items-baseline justify-between gap-2">
-                <h2 className="section-title mb-0">Находки ИИ · проверьте каждую · {patient.ctFindings.length}</h2>
-                <form action={rejectAllFindings.bind(null, patient.id)}>
-                  <ConfirmButton message="Отклонить все находки ИИ?" className="text-xs text-ink-mute hover:text-rose-600">Отклонить все</ConfirmButton>
-                </form>
-              </div>
-              <div className="space-y-2.5">
-                {patient.ctFindings.map((f) => (
-                  <div key={f.id} className="card card-pad">
-                    <form action={confirmFinding.bind(null, f.id)} className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <select name="tooth" defaultValue={f.toothNumber ?? ""} className="input w-auto min-w-[110px] py-2 font-semibold" aria-label="Зуб">
-                          <option value="">Без зуба</option>
-                          {[...ALL_TEETH].sort((a, b) => a - b).map((n) => <option key={n} value={n}>Зуб {n}</option>)}
-                        </select>
-                        {f.confidence && <span className="text-xs text-ink-mute">уверенность ИИ: {f.confidence}</span>}
-                      </div>
-                      <textarea name="text" rows={2} defaultValue={f.text} className="input text-[15px]" aria-label="Находка" />
-                      <div className="flex flex-wrap items-center gap-2">
-                        <select name="status" defaultValue={f.status ?? ""} className="input w-auto flex-1 py-2 text-sm sm:flex-none" aria-label="Состояние зуба в схеме">
-                          <option value="">Не отмечать в схеме</option>
-                          {TOOTH_STATUS.filter((o) => (AI_STATUSES as readonly string[]).includes(o.value)).map((o) => (
-                            <option key={o.value} value={o.value}>В схеме: {o.label}</option>
-                          ))}
-                        </select>
-                        <button className="btn-accent btn-sm">✓ Подтвердить</button>
-                        <button formAction={rejectFinding.bind(null, f.id)} className="btn-ghost btn-sm text-rose-600">✕ Отклонить</button>
-                      </div>
-                    </form>
-                  </div>
-                ))}
-              </div>
-              <p className="mt-2 px-1 text-xs text-ink-mute">Подтверждённая находка записывается в карту зуба (видно в зубной схеме на вкладке «Лечение»). Номер зуба и текст можно поправить перед подтверждением.</p>
-            </section>
-          )}
-          <p className="px-1 text-xs text-ink-mute">
-            ИИ (ГигаЧат) получает только картинку — без имени пациента. Его находки могут быть неточными: врач всегда проверяет снимок сам.
-            Пока находка не подтверждена, она никуда не записывается и пациенту не показывается.
-          </p>
         </div>
       )}
 

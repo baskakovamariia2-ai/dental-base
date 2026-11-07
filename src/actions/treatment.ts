@@ -6,7 +6,7 @@ import { requireUser } from "@/lib/auth";
 import { int, optInt, optStr, oneOf, str } from "@/lib/forms";
 import { TREATMENT_STATUS, values } from "@/lib/labels";
 import { isValidTooth } from "@/lib/teeth";
-import { fillMissingPrices, syncToothWithPlan } from "@/lib/plan";
+import { applyEndoRules, fillMissingPrices, syncToothWithPlan } from "@/lib/plan";
 
 function refresh(patientId: string) {
   revalidatePath(`/patients/${patientId}`);
@@ -32,6 +32,7 @@ export async function addTreatmentItem(patientId: string, formData: FormData) {
       sortOrder: (maxOrder._max.sortOrder ?? 0) + 1,
     },
   });
+  await applyEndoRules(patientId);
   await syncToothWithPlan(patientId, tooth);
   await fillMissingPrices({ patientIds: [patientId] });
   refresh(patientId);

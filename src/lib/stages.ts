@@ -21,13 +21,20 @@ export function areNeighbors(a: number, b: number) {
   return pair === "11-21" || pair === "31-41";
 }
 
+const canals = (t: string) => {
+  const m = /(\d|один|одного|два|двух|три|тр[её]х|четыре|четыр[её]х)\s*-?\s*канал/i.exec(t);
+  if (!m) return null;
+  const w: Record<string, number> = { один: 1, одного: 1, два: 2, двух: 2, три: 3, трех: 3, трёх: 3, четыре: 4, четырех: 4, четырёх: 4 };
+  return /^\d$/.test(m[1]) ? Number(m[1]) : w[m[1].toLowerCase()] ?? null;
+};
+
 // Порядок зубов слева направо, как на схеме
 const ORDER = [18, 17, 16, 15, 14, 13, 12, 11, 21, 22, 23, 24, 25, 26, 27, 28, 48, 47, 46, 45, 44, 43, 42, 41, 31, 32, 33, 34, 35, 36, 37, 38];
 const pos = (n: number | null) => (n === null ? 999 : ORDER.indexOf(n));
 
 type Item = { toothNumber: number | null; treatment: string; price: number; status: string };
 
-export type Visit<T> = { n: number; teeth: number[]; items: T[] };
+export type Visit<T> = { n: number; teeth: number[]; items: T[]; label?: string };
 export type Stage<T> = { key: number; title: string; visits: Visit<T>[]; total: number };
 
 export function buildStages<T extends Item>(items: T[]): Stage<T>[] {
@@ -40,8 +47,14 @@ export function buildStages<T extends Item>(items: T[]): Stage<T>[] {
   let visitNo = 0;
   for (const key of [...byStage.keys()].sort((a, b) => a - b)) {
     const list = byStage.get(key)!;
+    // Зубы с пульпитом/периодонтитом на 3–4 канала лечатся в два отдельных приёма
+    const twoVisit = new Set(
+      list
+        .filter((i) => i.toothNumber !== null && /пульпит|периодонт|канал/i.test(i.treatment) && !/реставрац/i.test(i.treatment) && (canals(i.treatment) ?? 0) >= 3)
+        .map((i) => i.toothNumber as number),
+    );
     // группы соседних зубов (связные компоненты)
-    const teeth = [...new Set(list.map((i) => i.toothNumber).filter((n): n is number => n !== null))].sort((a, b) => pos(a) - pos(b));
+    const teeth = [...new Set(list.map((i) => i.toothNumber).filter((n): n is number => n !== null && !twoVisit.has(n)))].sort((a, b) => pos(a) - pos(b));
     const groups: number[][] = [];
     for (const t of teeth) {
       const g = groups.find((grp) => grp.some((x) => areNeighbors(x, t)));
@@ -67,6 +80,14 @@ export function buildStages<T extends Item>(items: T[]): Stage<T>[] {
           .filter((i) => i.toothNumber !== null && g.includes(i.toothNumber))
           .sort((a, b) => pos(a.toothNumber) - pos(b.toothNumber) || Number(/канал|пульпит|периодонт/i.test(b.treatment)) - Number(/канал|пульпит|периодонт/i.test(a.treatment))),
       }));
+    for (const t of [...twoVisit].sort((a, b) => pos(a) - pos(b))) {
+      const own = list.filter((i) => i.toothNumber === t);
+      const endo = own.filter((i) => /пульпит|периодонт|канал/i.test(i.treatment) && !/реставрац/i.test(i.treatment));
+      const rest = own.filter((i) => !endo.includes(i));
+      visits.push({ n: 0, teeth: [t], items: endo, label: "лечение каналов, 1-й приём" });
+      visits.push({ n: 0, teeth: [t], items: rest, label: "лечение каналов, 2-й приём (пломбировка, реставрация)" });
+    }
+    visits.sort((a, b) => pos(a.teeth[0] ?? null) - pos(b.teeth[0] ?? null));
     const noTooth = list.filter((i) => i.toothNumber === null);
     if (noTooth.length) visits.unshift({ n: 0, teeth: [], items: noTooth });
     for (const v of visits) v.n = ++visitNo;

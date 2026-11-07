@@ -1,6 +1,6 @@
 import type { ToothStatus, TreatmentStatus } from "@prisma/client";
 import { prisma } from "./db";
-import { doneToothStatus, findPrice } from "./treatments";
+import { DEFAULT_RESTORATION_PRICE, ENDO_RESTORATION, FOUR_CANAL_NOTE, FOUR_CANAL_PRICE, canalCount, doneToothStatus, findPrice, isEndo, restorationPrice } from "./treatments";
 
 /** Зубная схема следует за планом лечения: план — единственное место, где вносится лечение */
 export async function syncToothWithPlan(patientId: string, toothNumber: number | null) {
@@ -60,4 +60,40 @@ export async function fillMissingPrices(where: { patientIds?: string[] } = {}) {
     }
   }
   return updated;
+}
+
+/**
+ * После добавления пульпита/периодонтита: сразу добавить реставрацию зуба (6 000 ₽ или по прайсу),
+ * а для 4-канального зуба — цена 15 000 ₽ и комментарий «скидка 5 000 ₽».
+ */
+export async function applyEndoRules(patientId: string) {
+  const items = await prisma.treatmentItem.findMany({ where: { patientId, status: { not: "CANCELLED" } } });
+  const endo = items.filter((i) => isEndo(i.treatment));
+  if (!endo.length) return;
+  const { items: prices } = await priceItemsFor(patientId);
+  for (const e of endo) {
+    if (canalCount(e.treatment) === 4 && e.status !== "DONE" && (e.price !== FOUR_CANAL_PRICE || !e.note)) {
+      await prisma.treatmentItem.update({
+        where: { id: e.id },
+        data: { price: FOUR_CANAL_PRICE, note: e.note && e.note.includes("скидка") ? e.note : [e.note, FOUR_CANAL_NOTE].filter(Boolean).join(" · ") },
+      });
+    }
+    // реставрацию добавляем один раз (если её потом удалили вручную — больше не добавляем)
+    if (e.toothNumber === null || e.status === "DONE" || e.diagnosis === "auto:resto") continue;
+    await prisma.treatmentItem.update({ where: { id: e.id }, data: { diagnosis: "auto:resto" } });
+    const hasRestoration = items.some((i) => i.toothNumber === e.toothNumber && /реставрац|пломб/i.test(i.treatment));
+    if (!hasRestoration) {
+      const created = await prisma.treatmentItem.create({
+        data: {
+          patientId,
+          toothNumber: e.toothNumber,
+          treatment: ENDO_RESTORATION,
+          price: restorationPrice(prices) || DEFAULT_RESTORATION_PRICE,
+          status: "PLANNED",
+          sortOrder: e.sortOrder + 1,
+        },
+      });
+      items.push(created);
+    }
+  }
 }

@@ -57,6 +57,15 @@ export default async function PriceListPage({ params, searchParams }: { params: 
           <button className="btn-primary btn-sm h-10">+</button>
         </form>
         <p className="mt-2 px-1 text-xs text-ink-mute">Цену можно поправить прямо в строке и нажать OK. Пустая цена подсвечена оранжевым.</p>
+        <div className="mt-3 rounded-xl bg-sky-50 px-4 py-3 text-sm text-sky-900">
+          <div className="font-medium">Правила для плана лечения</div>
+          <ul className="mt-1 list-disc space-y-0.5 pl-5">
+            <li>Периодонтит 1–4 канала — по тем же ценам, что пульпит.</li>
+            <li>Пульпит или периодонтит 4-канального зуба — 15 000 ₽ с комментарием «скидка 5 000 ₽».</li>
+            <li>К пульпиту и периодонтиту сразу добавляется реставрация зуба — по цене реставрации из прайса (если её нет — 6 000 ₽).</li>
+            <li>3- и 4-канальные зубы в плане делятся на два приёма.</li>
+          </ul>
+        </div>
       </section>
 
       <form action={updatePriceList.bind(null, list.id)} className="space-y-4">

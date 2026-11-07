@@ -1,4 +1,4 @@
-import { CATEGORY_STYLE, isUpper, toothKind, type ToothCategory } from "@/lib/teeth";
+import { CATEGORY_STYLE, COLOR, isUpper, toothKind, type ToothCategory } from "@/lib/teeth";
 
 // Контуры зубов нарисованы для верхней челюсти (корни вверх, коронка внизу).
 // Для нижней челюсти отражаем по вертикали.
@@ -10,24 +10,38 @@ const PATHS = {
   molarLower: "M7.5 44 C6.5 30 8 15 11.5 7 C14.5 16 16.5 28 18 38 L22 38 C23.5 28 25.5 16 28.5 7 C32 15 33.5 30 32.5 44 C37.5 48 38.5 58 37 67 C35.5 76 29 78 24 76 C21.5 77.5 18.5 77.5 16 76 C11 78 4.5 76 3 67 C1.5 58 2.5 48 7.5 44 Z",
 } as const;
 
+// Каналы (полоски) для пульпита/периодонтита — по одному на корень
+const CANALS: Record<keyof typeof PATHS, [number, number, number, number][]> = {
+  incisor: [[20, 12, 20, 54]],
+  canine: [[20, 8, 20, 52]],
+  premolar: [[20, 12, 20, 52]],
+  molarUpper: [[10.5, 14, 13, 46], [20.5, 12, 20.5, 46], [31, 16, 28.5, 46]],
+  molarLower: [[12, 12, 14.5, 46], [28, 12, 25.5, 46]],
+};
+
 export function ToothIcon({ number, category, className = "h-14 w-7" }: { number: number; category: ToothCategory; className?: string }) {
   const kind = toothKind(number);
   const upper = isUpper(number);
-  const d = kind === "molar" ? (upper ? PATHS.molarUpper : PATHS.molarLower) : PATHS[kind];
+  const key: keyof typeof PATHS = kind === "molar" ? (upper ? "molarUpper" : "molarLower") : kind;
   const st = CATEGORY_STYLE[category];
   return (
     <svg viewBox="0 0 40 80" className={className} aria-hidden>
       <g transform={upper ? undefined : "translate(0 80) scale(1 -1)"}>
         <path
-          d={d}
+          d={PATHS[key]}
           fill={st.fill}
-          stroke={category === "healthy" || category === "missing" ? st.stroke : "#ffffff"}
-          strokeWidth={category === "healthy" || category === "missing" ? 1.6 : 1.2}
+          stroke={category === "treated" ? "#ffffff" : st.stroke}
+          strokeWidth={1.5}
           strokeLinejoin="round"
           strokeDasharray={category === "missing" ? "3 3" : undefined}
         />
+        {category === "endo" &&
+          CANALS[key].map(([x1, y1, x2, y2], i) => (
+            <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke={COLOR.endo} strokeWidth={4} strokeLinecap="round" />
+          ))}
+        {category === "caries" && <rect x={kind === "molar" ? 9 : 14} y={56} width={11} height={11} rx={1.5} fill={COLOR.caries} />}
       </g>
-      {category === "missing" && <path d="M10 30 L30 50 M30 30 L10 50" stroke="#E8384F" strokeWidth={3.5} strokeLinecap="round" />}
+      {category === "extract" && <path d="M5 16 L35 66 M35 16 L5 66" stroke={COLOR.cross} strokeWidth={2.8} strokeLinecap="round" />}
     </svg>
   );
 }
@@ -36,12 +50,9 @@ export function ToothIcon({ number, category, className = "h-14 w-7" }: { number
 export function ToothCellView({ number, category, small }: { number: number; category: ToothCategory; small?: boolean }) {
   const upper = isUpper(number);
   const st = CATEGORY_STYLE[category];
-  const num = <span className={`${small ? "text-[9px]" : "text-[12px]"} font-medium tabular-nums text-zinc-700`}>{number}</span>;
+  const num = <span className={`${small ? "text-[9px]" : "text-[12px]"} font-semibold tabular-nums text-zinc-700`}>{number}</span>;
   return (
-    <span
-      className={`flex w-full flex-col items-center justify-center gap-0.5 rounded-xl ${small ? "py-1" : "py-1.5"}`}
-      style={{ background: st.bg }}
-    >
+    <span className={`flex w-full flex-col items-center justify-center gap-0.5 rounded-xl ${small ? "py-1" : "py-1.5"}`} style={{ background: st.bg }}>
       {!upper && num}
       <ToothIcon number={number} category={category} className={small ? "h-10 w-5" : "h-12 w-6 sm:h-14 sm:w-7"} />
       {upper && num}
@@ -49,20 +60,24 @@ export function ToothCellView({ number, category, small }: { number: number; cat
   );
 }
 
-export function CategoryLegend({ small }: { small?: boolean }) {
-  const items: ToothCategory[] = ["problem", "treated", "healthy", "missing"];
+function LegendMark({ c }: { c: ToothCategory }) {
+  if (c === "extract") return <span className="font-bold leading-none" style={{ color: COLOR.cross }}>✕</span>;
+  if (c === "caries") return <span className="inline-block h-3 w-3 rounded-[3px]" style={{ background: COLOR.caries }} />;
+  if (c === "endo") return <span className="inline-block h-3.5 w-1.5 rounded-full" style={{ background: COLOR.endo }} />;
+  if (c === "healthy") return <span className="inline-block h-3 w-3 rounded-full" style={{ boxShadow: "inset 0 0 0 2px #52525B" }} />;
+  if (c === "missing") return <span className="inline-block h-3 w-3 rounded-full border border-dashed border-zinc-400" />;
+  return <span className="inline-block h-3 w-3 rounded-full" style={{ background: c === "treated" ? CATEGORY_STYLE.treated.fill : "#E8384F" }} />;
+}
+
+/** Легенда: основные группы всегда, дополнительные — только если есть на схеме */
+export function CategoryLegend({ small, present }: { small?: boolean; present?: Set<ToothCategory> }) {
+  const main: ToothCategory[] = ["caries", "endo", "extract", "treated", "healthy"];
+  const extra: ToothCategory[] = (["problem", "missing"] as ToothCategory[]).filter((c) => !present || present.has(c));
   return (
-    <div className={`flex flex-wrap justify-center gap-x-4 gap-y-1.5 ${small ? "text-[11px]" : "text-sm"} text-zinc-500`}>
-      {items.map((c) => (
+    <div className={`flex flex-wrap justify-center gap-x-4 gap-y-1.5 ${small ? "text-[11px]" : "text-sm"} text-zinc-600`}>
+      {[...main, ...extra].map((c) => (
         <span key={c} className="flex items-center gap-1.5">
-          {c === "missing" ? (
-            <span className="font-bold leading-none text-[#E8384F]">✕</span>
-          ) : (
-            <span
-              className="inline-block h-3 w-3 rounded-full"
-              style={{ background: CATEGORY_STYLE[c].fill, boxShadow: c === "healthy" ? "inset 0 0 0 2px #18181b" : undefined }}
-            />
-          )}
+          <LegendMark c={c} />
           {CATEGORY_STYLE[c].label}
         </span>
       ))}
