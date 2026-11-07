@@ -89,3 +89,17 @@ export function doneToothStatus(treatment: string): "EXTRACTED" | "CROWN" | "IMP
   if (/реставр|пломб|кариес|пульпит|периодонт|канал/.test(t)) return "FILLING";
   return "TREATED";
 }
+
+/** Коронка делается в три приёма: 10 000 + 10 000 + 5 000 (при другой цене — 40% / 40% / 20%) */
+export const CROWN_PARTS = 3;
+export function splitCrownPrice(total: number): number[] {
+  if (total === 25000) return [10000, 10000, 5000];
+  if (!total) return [0, 0, 0];
+  const a = Math.round((total * 0.4) / 100) * 100;
+  return [a, a, total - 2 * a];
+}
+export const crownPartName = (base: string, part: number) => `${base} — ${part}-й приём`;
+export const partOf = (treatment: string) => {
+  const m = /— (\d)-й приём$/.exec(treatment);
+  return m ? Number(m[1]) : null;
+};

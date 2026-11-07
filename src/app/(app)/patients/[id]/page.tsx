@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { patientStats, ALL_TEETH } from "@/lib/teeth";
 import { getReminderTemplate, reminderText } from "@/lib/reminder";
-import { applyEndoRules, fillMissingPrices } from "@/lib/plan";
+import { applyCrownRules, applyEndoRules, fillMissingPrices } from "@/lib/plan";
 import { getSettings } from "@/lib/settings";
 import { buildStages } from "@/lib/stages";
 import { ReminderButton } from "@/components/reminder-button";
@@ -45,6 +45,7 @@ export default async function PatientPage({
   // цены из прайса подставляются в план автоматически (где цена ещё не указана)
   await applyEndoRules(id);
   await fillMissingPrices({ patientIds: [id] });
+  await applyCrownRules(id);
 
   const patient = await prisma.patient.findUnique({
     where: { id },

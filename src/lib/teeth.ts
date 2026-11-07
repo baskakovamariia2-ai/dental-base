@@ -66,7 +66,7 @@ export function patientStats(
     caries: count((t) => RE_CARIES.test(t) && !/после лечения каналов/i.test(t)),
     endo: count((t) => RE_ENDO.test(t) && !/реставрац/i.test(t)),
     extraction: count((t) => RE_EXTRACT.test(t)),
-    crowns: count((t) => /коронк/i.test(t)),
+    crowns: count((t) => /коронк/i.test(t) && !/— [23]-й приём$/.test(t)),
     problem: cats.extract + cats.endo + cats.caries + cats.problem,
     treated: cats.treated,
     missing: cats.missing,

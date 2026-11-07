@@ -53,8 +53,15 @@ export function buildStages<T extends Item>(items: T[]): Stage<T>[] {
         .filter((i) => i.toothNumber !== null && /пульпит|периодонт|канал/i.test(i.treatment) && !/реставрац/i.test(i.treatment) && (canals(i.treatment) ?? 0) >= 3)
         .map((i) => i.toothNumber as number),
     );
+    // Коронки, разделённые на приёмы («— 1-й приём» …): каждый приём отдельно, соседние зубы вместе
+    const part = (t: string) => {
+      const m = /— (\d)-й приём$/.exec(t);
+      return m ? Number(m[1]) : null;
+    };
+    const parted = list.filter((i) => part(i.treatment) !== null && i.toothNumber !== null);
+    const partedTeeth = new Set(parted.map((i) => i.toothNumber as number));
     // группы соседних зубов (связные компоненты)
-    const teeth = [...new Set(list.map((i) => i.toothNumber).filter((n): n is number => n !== null && !twoVisit.has(n)))].sort((a, b) => pos(a) - pos(b));
+    const teeth = [...new Set(list.map((i) => i.toothNumber).filter((n): n is number => n !== null && !twoVisit.has(n) && !partedTeeth.has(n)))].sort((a, b) => pos(a) - pos(b));
     const groups: number[][] = [];
     for (const t of teeth) {
       const g = groups.find((grp) => grp.some((x) => areNeighbors(x, t)));
@@ -81,6 +88,27 @@ export function buildStages<T extends Item>(items: T[]): Stage<T>[] {
           .filter((i) => i.toothNumber !== null && g.includes(i.toothNumber))
           .sort((a, b) => pos(a.toothNumber) - pos(b.toothNumber) || Number(/канал|пульпит|периодонт/i.test(b.treatment)) - Number(/канал|пульпит|периодонт/i.test(a.treatment))),
       }));
+    const groupTeeth = (ts: number[]) => {
+      const gs: number[][] = [];
+      for (const t of [...ts].sort((a, b) => pos(a) - pos(b))) {
+        const g = gs.find((grp) => grp.some((x) => areNeighbors(x, t)));
+        if (g) g.push(t);
+        else gs.push([t]);
+      }
+      return gs;
+    };
+    for (const g of groupTeeth([...partedTeeth])) {
+      const parts = [...new Set(parted.filter((i) => g.includes(i.toothNumber as number)).map((i) => part(i.treatment) as number))].sort();
+      for (const p of parts) {
+        visits.push({
+          n: 0,
+          total: 0,
+          teeth: g,
+          items: list.filter((i) => i.toothNumber !== null && g.includes(i.toothNumber) && (part(i.treatment) === p || (p === parts[0] && part(i.treatment) === null))),
+          label: `коронка, ${p}-й приём`,
+        });
+      }
+    }
     for (const t of [...twoVisit].sort((a, b) => pos(a) - pos(b))) {
       const own = list.filter((i) => i.toothNumber === t);
       const endo = own.filter((i) => /пульпит|периодонт|канал/i.test(i.treatment) && !/реставрац/i.test(i.treatment));

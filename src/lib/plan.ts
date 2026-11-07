@@ -1,6 +1,6 @@
 import type { ToothStatus, TreatmentStatus } from "@prisma/client";
 import { prisma } from "./db";
-import { DEFAULT_RESTORATION_PRICE, ENDO_RESTORATION, FOUR_CANAL_NOTE, FOUR_CANAL_PRICE, canalCount, doneToothStatus, findPrice, isEndo, restorationPrice } from "./treatments";
+import { CROWN_PARTS, DEFAULT_RESTORATION_PRICE, ENDO_RESTORATION, FOUR_CANAL_NOTE, FOUR_CANAL_PRICE, canalCount, crownPartName, doneToothStatus, findPrice, isEndo, restorationPrice, splitCrownPrice } from "./treatments";
 
 /** Зубная схема следует за планом лечения: план — единственное место, где вносится лечение */
 export async function syncToothWithPlan(patientId: string, toothNumber: number | null) {
@@ -45,7 +45,12 @@ export async function priceItemsFor(patientId: string) {
  */
 export async function fillMissingPrices(where: { patientIds?: string[] } = {}) {
   const items = await prisma.treatmentItem.findMany({
-    where: { price: 0, status: { not: "CANCELLED" }, ...(where.patientIds ? { patientId: { in: where.patientIds } } : {}) },
+    where: {
+      price: 0,
+      status: { not: "CANCELLED" },
+      NOT: { diagnosis: { startsWith: "crown:" } },
+      ...(where.patientIds ? { patientId: { in: where.patientIds } } : {}),
+    },
     select: { id: true, patientId: true, treatment: true },
   });
   if (!items.length) return 0;
@@ -95,5 +100,46 @@ export async function applyEndoRules(patientId: string) {
       });
       items.push(created);
     }
+  }
+}
+
+/** Коронку (ещё не выполненную) делим на три приёма с ценой 10 000 + 10 000 + 5 000 */
+export async function applyCrownRules(patientId: string) {
+  const items = await prisma.treatmentItem.findMany({
+    where: { patientId, status: { in: ["PLANNED", "IN_PROGRESS"] }, treatment: { contains: "оронк" } },
+  });
+  if (!items.length) return;
+  const { items: prices } = await priceItemsFor(patientId);
+  for (const it of items) {
+    if (it.diagnosis?.startsWith("crown:")) {
+      // часть уже разделённой коронки без цены — досчитать, когда цена появилась в прайсе
+      if (!it.price) {
+        const [, part, base] = it.diagnosis.split(":");
+        const total = findPrice(base, prices) ?? 0;
+        const price = splitCrownPrice(total)[Number(part) - 1] ?? 0;
+        if (price) await prisma.treatmentItem.update({ where: { id: it.id }, data: { price } });
+      }
+      continue;
+    }
+    const total = it.price || findPrice(it.treatment, prices) || 0;
+    const parts = splitCrownPrice(total);
+    await prisma.$transaction([
+      prisma.treatmentItem.delete({ where: { id: it.id } }),
+      ...Array.from({ length: CROWN_PARTS }, (_, i) =>
+        prisma.treatmentItem.create({
+          data: {
+            patientId,
+            toothNumber: it.toothNumber,
+            treatment: crownPartName(it.treatment, i + 1),
+            price: parts[i],
+            paid: i === 0 ? Math.min(it.paid, parts[0]) : 0,
+            note: i === 0 ? it.note : null,
+            status: i === 0 ? it.status : "PLANNED",
+            sortOrder: it.sortOrder,
+            diagnosis: `crown:${i + 1}:${it.treatment}`,
+          },
+        }),
+      ),
+    ]);
   }
 }
