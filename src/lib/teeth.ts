@@ -38,8 +38,8 @@ export function toothCategory(status: ToothStatus, openTreatments: string[]): To
 }
 
 export const CATEGORY_STYLE: Record<ToothCategory, { label: string; fill: string; stroke: string; bg: string }> = {
-  caries: { label: "Кариес зуба", fill: "#FFFFFF", stroke: "#52525B", bg: "transparent" },
-  endo: { label: "Пульпит зуба (периодонтит)", fill: "#FFFFFF", stroke: "#52525B", bg: "#E0F5F4" },
+  caries: { label: "Кариес зуба", fill: "#FFFFFF", stroke: "#52525B", bg: "#E6F4DA" },
+  endo: { label: "Пульпит зуба (периодонтит)", fill: "#FFFFFF", stroke: "#52525B", bg: "#DCEEFF" },
   extract: { label: "Рекомендовано к удалению", fill: "#FFFFFF", stroke: "#52525B", bg: "#FCE4E8" },
   problem: { label: "Коронка / имплант", fill: "#FFFFFF", stroke: "#E8384F", bg: "#FCE4E8" },
   treated: { label: "Вылеченные", fill: "#7C5CFA", stroke: "#7C5CFA", bg: "#E6E1FD" },

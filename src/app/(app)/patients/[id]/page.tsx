@@ -282,6 +282,10 @@ export default async function PatientPage({
                       </div>
                     </div>
                         ))}
+                        <div className="flex justify-between border-t border-dashed border-zinc-200 px-4 py-2 text-sm">
+                          <span className="text-ink-soft">Итого за приём {v.n}</span>
+                          <span className="font-semibold tabular-nums">{money(v.total)}</span>
+                        </div>
                       </div>
                     ))}
                   </div>

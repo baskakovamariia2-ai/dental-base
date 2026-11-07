@@ -34,7 +34,7 @@ const pos = (n: number | null) => (n === null ? 999 : ORDER.indexOf(n));
 
 type Item = { toothNumber: number | null; treatment: string; price: number; status: string };
 
-export type Visit<T> = { n: number; teeth: number[]; items: T[]; label?: string };
+export type Visit<T> = { n: number; teeth: number[]; items: T[]; label?: string; total: number };
 export type Stage<T> = { key: number; title: string; visits: Visit<T>[]; total: number };
 
 export function buildStages<T extends Item>(items: T[]): Stage<T>[] {
@@ -74,6 +74,7 @@ export function buildStages<T extends Item>(items: T[]): Stage<T>[] {
       .sort((a, b) => pos(a[0]) - pos(b[0]))
       .map((g) => ({
         n: 0,
+        total: 0,
         teeth: g,
         // внутри приёма: сначала каналы, потом кариес
         items: list
@@ -84,13 +85,16 @@ export function buildStages<T extends Item>(items: T[]): Stage<T>[] {
       const own = list.filter((i) => i.toothNumber === t);
       const endo = own.filter((i) => /пульпит|периодонт|канал/i.test(i.treatment) && !/реставрац/i.test(i.treatment));
       const rest = own.filter((i) => !endo.includes(i));
-      visits.push({ n: 0, teeth: [t], items: endo, label: "лечение каналов, 1-й приём" });
-      visits.push({ n: 0, teeth: [t], items: rest, label: "лечение каналов, 2-й приём (пломбировка, реставрация)" });
+      visits.push({ n: 0, teeth: [t], items: endo, label: "лечение каналов, 1-й приём", total: 0 });
+      visits.push({ n: 0, teeth: [t], items: rest, label: "лечение каналов, 2-й приём (пломбировка, реставрация)", total: 0 });
     }
     visits.sort((a, b) => pos(a.teeth[0] ?? null) - pos(b.teeth[0] ?? null));
     const noTooth = list.filter((i) => i.toothNumber === null);
-    if (noTooth.length) visits.unshift({ n: 0, teeth: [], items: noTooth });
-    for (const v of visits) v.n = ++visitNo;
+    if (noTooth.length) visits.unshift({ n: 0, teeth: [], items: noTooth, total: 0 });
+    for (const v of visits) {
+      v.n = ++visitNo;
+      v.total = v.items.filter((i) => i.status !== "CANCELLED").reduce((sum, i) => sum + i.price, 0);
+    }
     const stage = STAGES.find((s) => s.key === key);
     result.push({
       key,

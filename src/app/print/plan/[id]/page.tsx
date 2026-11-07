@@ -93,6 +93,10 @@ export default async function PrintPlanPage({ params }: { params: Promise<{ id: 
                             <td className="py-2 text-right tabular-nums">{i.price ? money(i.price) : "—"}</td>
                           </tr>
                         ))}
+                        <tr>
+                          <td colSpan={2} className="py-1.5 text-right text-[12px] text-zinc-500">Итого за приём {v.n}</td>
+                          <td className="py-1.5 text-right text-[13px] font-semibold tabular-nums">{money(v.total)}</td>
+                        </tr>
                       </tbody>
                     </table>
                   </div>
