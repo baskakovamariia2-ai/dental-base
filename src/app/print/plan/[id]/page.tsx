@@ -69,7 +69,7 @@ export default async function PrintPlanPage({ params }: { params: Promise<{ id: 
             {buildStages(items).map((st) => (
               <div key={st.key} className="break-inside-avoid">
                 <div className="mb-2 flex items-baseline justify-between border-b-2 border-zinc-200 pb-1.5">
-                  <h2 className="text-[16px] font-semibold">Этап {st.key <= 5 ? st.key : ""} · {st.title}</h2>
+                  <h2 className="text-[16px] font-semibold">{st.key < 7 ? `Этап ${st.key} · ` : ""}{st.title}</h2>
                   <span className="text-[14px] font-medium tabular-nums">{money(st.total)}</span>
                 </div>
                 {st.visits.map((v) => (

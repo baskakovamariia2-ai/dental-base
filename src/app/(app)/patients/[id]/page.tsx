@@ -237,7 +237,7 @@ export default async function PatientPage({
               {buildStages(planItems).map((st) => (
                 <section key={st.key}>
                   <div className="mb-2 flex items-baseline justify-between px-1">
-                    <h3 className="text-[15px] font-semibold">Этап {st.key <= 5 ? st.key : ""} · {st.title}</h3>
+                    <h3 className="text-[15px] font-semibold">{st.key < 7 ? `Этап ${st.key} · ` : ""}{st.title}</h3>
                     <span className="text-sm tabular-nums text-ink-soft">{money(st.total)}</span>
                   </div>
                   <div className="card divide-y divide-zinc-100 overflow-hidden">
@@ -292,7 +292,7 @@ export default async function PatientPage({
                   </div>
                 </section>
               ))}
-              <p className="px-1 text-xs text-ink-mute">Порядок: сначала кариес и каналы, потом удаление, имплантация и коронки. Соседние зубы объединены в один приём.</p>
+              <p className="px-1 text-xs text-ink-mute">Порядок: кариес → пульпит и периодонтит → коронки → удаление → имплантация. Соседние зубы с кариесом объединены в один приём.</p>
             </div>
           )}
 
