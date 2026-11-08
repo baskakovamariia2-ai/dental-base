@@ -46,6 +46,19 @@ export function restorationPrice(items: { name: string; price: number }[]) {
   return findPrice("Реставрация (кариес)", items) ?? DEFAULT_RESTORATION_PRICE;
 }
 
+/** Какая строка прайса соответствует виду лечения (для объединения списков без дублей) */
+export function findPriceItem<T extends { name: string; price: number }>(treatment: string, items: T[]): T | null {
+  const p = findPrice(treatment, items);
+  if (p === null) return null;
+  const t = treatment.toLowerCase();
+  const n = canalCount(t);
+  return (
+    items.find((i) => i.name.toLowerCase() === t) ??
+    items.find((i) => i.price === p && (n === null || canalCount(i.name) === n)) ??
+    null
+  );
+}
+
 /** Подбор цены по прайсу пациента */
 export function findPrice(treatment: string, items: { name: string; price: number }[]): number | null {
   const t = treatment.toLowerCase();
@@ -103,3 +116,15 @@ export const partOf = (treatment: string) => {
   const m = /— (\d)-й приём$/.exec(treatment);
   return m ? Number(m[1]) : null;
 };
+
+/** Единый список для выбора лечения: наши виды лечения с ценой из прайса + услуги прайса, которых нет среди них */
+export function treatmentOptions(items: { name: string; price: number }[]) {
+  const covered = new Set<string>();
+  const types = TREATMENT_TYPES.map((t) => {
+    const it = findPriceItem(t, items);
+    if (it) covered.add(it.name);
+    return { value: t, price: findPrice(t, items) };
+  });
+  const extra = items.filter((i) => !covered.has(i.name)).map((i) => ({ value: i.name, price: i.price || null }));
+  return [...types, ...extra];
+}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { TREATMENT_TYPES, findPrice } from "@/lib/treatments";
+import { TREATMENT_TYPES, findPrice, treatmentOptions } from "@/lib/treatments";
 import { ALL_TEETH } from "@/lib/teeth";
 
 type PlanOpt = { id: string; toothNumber: number | null; treatment: string; price: number };
@@ -74,15 +74,12 @@ export function ProcedureFields({
             </optgroup>
           )}
           <optgroup label="Лечение">
-            {TREATMENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+            {treatmentOptions(prices).map((o) => (
+              <option key={o.value} value={o.value}>{o.value}{o.price ? ` — ${o.price.toLocaleString("ru-RU")} ₽` : ""}</option>
+            ))}
             <option value="Консультация">Консультация</option>
             <option value="Контрольный осмотр">Контрольный осмотр</option>
           </optgroup>
-          {prices.length > 0 && (
-            <optgroup label="Из прайса">
-              {prices.map((p, i) => <option key={i} value={p.name}>{p.name}</option>)}
-            </optgroup>
-          )}
           <option value="__other">Другое…</option>
         </select>
       </label>

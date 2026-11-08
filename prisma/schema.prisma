@@ -203,7 +203,8 @@ model TreatmentItem {
   treatment   String
   price       Int // цена, назначенная пациенту (не меняется при изменении прайса)
   paid        Int             @default(0)
-  note        String? // заметка (по желанию)
+  note        String? // заметка для пациента (видна в PDF)
+  internalNote String? // заметка только для нас
   status      TreatmentStatus @default(PLANNED)
   sortOrder   Int             @default(0)
   createdAt   DateTime        @default(now())

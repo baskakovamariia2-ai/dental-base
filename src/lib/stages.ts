@@ -94,8 +94,11 @@ export function buildStages<T extends Item>(items: T[]): Stage<T>[] {
           groups.splice(j, 1);
           j = i;
         }
-    const visits: Visit<T>[] = groups
+    // не больше двух зубов с кариесом за один приём
+    const chunked = groups
       .map((g) => g.sort((a, b) => pos(a) - pos(b)))
+      .flatMap((g) => (key === 1 ? Array.from({ length: Math.ceil(g.length / 2) }, (_, i) => g.slice(i * 2, i * 2 + 2)) : [g]));
+    const visits: Visit<T>[] = chunked
       .sort((a, b) => pos(a[0]) - pos(b[0]))
       .map((g) => ({
         n: 0,

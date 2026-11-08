@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { TREATMENT_TYPES, findPrice } from "@/lib/treatments";
+import { TREATMENT_TYPES, findPrice, treatmentOptions } from "@/lib/treatments";
 
 /** Выбор вида лечения + цена (подставляется из прайса пациента, можно изменить) */
 export function TreatmentFields({ prices, compact }: { prices: { name: string; price: number }[]; compact?: boolean }) {
@@ -23,12 +23,11 @@ export function TreatmentFields({ prices, compact }: { prices: { name: string; p
             setPrice(p !== null ? String(p) : "");
           }}
         >
-          {TREATMENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-          {prices.length > 0 && (
-            <optgroup label="Из прайса">
-              {prices.map((p, i) => <option key={i} value={p.name}>{p.name}</option>)}
-            </optgroup>
-          )}
+          {treatmentOptions(prices).map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.value}{o.price ? ` — ${o.price.toLocaleString("ru-RU")} ₽` : ""}
+            </option>
+          ))}
           <option value="__other">Другое…</option>
         </select>
       </label>
@@ -45,8 +44,14 @@ export function TreatmentFields({ prices, compact }: { prices: { name: string; p
       </label>
       {!compact && (
         <label className="block">
-          <span className="label">Заметка (по желанию)</span>
+          <span className="label">Заметка для пациента (видна в PDF)</span>
           <input name="note" className="input" />
+        </label>
+      )}
+      {!compact && (
+        <label className="block">
+          <span className="label">🔒 Заметка для нас (пациент не видит)</span>
+          <input name="internalNote" className="input" />
         </label>
       )}
     </>

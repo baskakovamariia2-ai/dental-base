@@ -26,6 +26,7 @@ export async function addTreatmentItem(patientId: string, formData: FormData) {
       toothNumber: tooth,
       treatment,
       note: optStr(formData, "note", 1000),
+      internalNote: optStr(formData, "internalNote", 1000),
       price: Math.max(0, int(formData, "price")),
       paid: Math.max(0, int(formData, "paid")),
       status: oneOf(formData, "status", values(TREATMENT_STATUS), "PLANNED"),
@@ -53,6 +54,7 @@ export async function updateTreatmentItem(id: string, formData: FormData) {
       price: Math.max(0, int(formData, "price", item.price)),
       treatment: str(formData, "treatment", 300) || item.treatment,
       note: formData.has("note") ? optStr(formData, "note", 1000) : item.note,
+      internalNote: formData.has("internalNote") ? optStr(formData, "internalNote", 1000) : item.internalNote,
     },
   });
   await syncToothWithPlan(item.patientId, item.toothNumber);

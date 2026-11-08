@@ -8,6 +8,7 @@ import { TREATMENT_STATUS } from "@/lib/labels";
 import { CATEGORY_STYLE, LOWER, UPPER, toothCategory, type ToothCategory } from "@/lib/teeth";
 import { CategoryLegend, ToothCellView } from "./tooth-shape";
 import { TreatmentFields } from "./price-picker";
+import { findPrice } from "@/lib/treatments";
 
 export type ToothData = { number: number; status: ToothStatus; notes: string | null };
 export type PlanItemData = { id: string; toothNumber: number | null; treatment: string; price: number; status: TreatmentStatus };
@@ -66,6 +67,16 @@ function ToothSheet({
 }: { patientId: string; tooth: ToothData; category: ToothCategory; plan: PlanItemData[]; prices: PriceOption[]; onClose: () => void }) {
   const [busy, setBusy] = useState(false);
   const [formKey, setFormKey] = useState(0);
+  const [endoOpen, setEndoOpen] = useState(false);
+  const addPlan = (treatment: string) =>
+    run(async () => {
+      const fd = new FormData();
+      fd.set("toothNumber", String(tooth.number));
+      fd.set("treatment", treatment);
+      fd.set("price", String(findPrice(treatment, prices) ?? ""));
+      await addItem(fd);
+      setEndoOpen(false);
+    });
   const save = saveTooth.bind(null, patientId, tooth.number);
   const addItem = addTreatmentItem.bind(null, patientId);
   const run = async (fn: () => Promise<void>) => {
@@ -151,12 +162,52 @@ function ToothSheet({
               </button>
             ))}
           </div>
+          {/* Пульпит/периодонтит и удаление — сразу попадают в план */}
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setEndoOpen((v) => !v)}
+              className={`flex min-h-[44px] items-center justify-center gap-2 rounded-xl text-sm font-medium ring-1 ${category === "endo" ? "ring-2 ring-ink" : "ring-zinc-200"}`}
+              style={{ background: CATEGORY_STYLE.endo.bg }}
+            >
+              <span className="h-3.5 w-1.5 rounded-full" style={{ background: "#4DC3BE" }} />
+              Пульпит / периодонтит
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => addPlan("Зуб под удаление")}
+              className={`flex min-h-[44px] items-center justify-center gap-2 rounded-xl text-sm font-medium ring-1 ${category === "extract" ? "ring-2 ring-ink" : "ring-zinc-200"}`}
+              style={{ background: CATEGORY_STYLE.extract.bg }}
+            >
+              <span className="font-bold text-[#E53935]">✕</span>
+              Под удаление
+            </button>
+          </div>
+          {endoOpen && (
+            <div className="space-y-2 rounded-xl bg-zinc-50 p-3">
+              {["Пульпит", "Периодонтит"].map((d) => (
+                <div key={d}>
+                  <div className="mb-1 text-xs font-medium text-ink-soft">{d}</div>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {[1, 2, 3, 4].map((n) => (
+                      <button key={n} type="button" disabled={busy} onClick={() => addPlan(`${d} — ${n} ${n === 1 ? "канал" : "канала"}`)} className="btn-secondary btn-sm h-10 px-1 text-xs">
+                        {n} {n === 1 ? "канал" : "канала"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              <p className="text-xs text-ink-mute">Добавится в план вместе с реставрацией зуба.</p>
+            </div>
+          )}
           <label className="block">
-            <span className="label">Заметки (по желанию)</span>
+            <span className="label">🔒 Заметка о зубе (только для нас)</span>
             <textarea name="notes" rows={2} defaultValue={tooth.notes ?? ""} className="input" />
           </label>
           <button disabled={busy} className="btn-secondary w-full">Сохранить заметку</button>
-          <p className="text-xs text-ink-mute">Нажмите на состояние — оно сохранится сразу. Если есть лечение в плане, зуб и так отмечен как проблемный.</p>
+          <p className="text-xs text-ink-mute">Состояние сохраняется сразу. «Пульпит / периодонтит» и «Под удаление» сразу добавляют лечение в план. Если есть лечение в плане, зуб и так отмечен как проблемный.</p>
         </form>
       </div>
     </div>
