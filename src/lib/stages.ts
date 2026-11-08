@@ -49,8 +49,15 @@ export type Stage<T> = { key: number; title: string; visits: Visit<T>[]; total: 
 
 export function buildStages<T extends Item>(items: T[]): Stage<T>[] {
   const byStage = new Map<number, T[]>();
+  // Зубы с пульпитом/периодонтитом: любая реставрация этого зуба идёт ПОСЛЕ лечения каналов (в том же этапе)
+  const endoTeeth = new Set(
+    items
+      .filter((i) => i.toothNumber !== null && i.status !== "CANCELLED" && stageOf(i.treatment) === 2 && !/реставрац/i.test(i.treatment))
+      .map((i) => i.toothNumber as number),
+  );
   for (const it of items) {
-    const k = stageOf(it.treatment);
+    let k = stageOf(it.treatment);
+    if (k === 1 && it.toothNumber !== null && endoTeeth.has(it.toothNumber) && /реставрац|кариес|пломб/i.test(it.treatment)) k = 2;
     byStage.set(k, [...(byStage.get(k) ?? []), it]);
   }
   const result: Stage<T>[] = [];
