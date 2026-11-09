@@ -11,7 +11,7 @@ import { TreatmentFields } from "./price-picker";
 import { findPrice } from "@/lib/treatments";
 
 export type ToothData = { number: number; status: ToothStatus; notes: string | null };
-export type PlanItemData = { id: string; toothNumber: number | null; treatment: string; price: number; status: TreatmentStatus };
+export type PlanItemData = { id: string; toothNumber: number | null; treatment: string; price: number; status: TreatmentStatus; note?: string | null; internalNote?: string | null };
 export type PriceOption = { name: string; price: number };
 
 const OPEN = (s: TreatmentStatus) => s === "PLANNED" || s === "IN_PROGRESS";
@@ -109,6 +109,7 @@ function ToothSheet({
               <span className="min-w-0 flex-1 text-[15px]">
                 {p.treatment}
                 <span className="block text-xs text-ink-mute">{p.price ? `${p.price.toLocaleString("ru-RU")} ₽` : "цена не указана"}</span>
+                {p.internalNote && <span className="block text-xs text-amber-700">🔒 {p.internalNote}</span>}
               </span>
               <form action={updateTreatmentItem.bind(null, p.id)}>
                 <select

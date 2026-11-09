@@ -10,6 +10,7 @@ export type DictatedItem = {
   status: ToothStatus | null;
   diagnosis: string | null;
   treatment: string | null;
+  note?: string | null;
 };
 
 type Kw = { re: RegExp; treatment?: string | ((m: RegExpExecArray) => string); status?: ToothStatus; noPlan?: boolean; noTooth?: boolean };
@@ -59,10 +60,11 @@ function normalize(text: string) {
     .trim();
 }
 
-type Tok = { kind: "tooth"; n: number } | { kind: "kw"; kw: Kw; treatment: string | null };
+type Tok = { kind: "tooth"; n: number } | { kind: "kw"; kw: Kw; treatment: string | null; note: string[] };
 
 function tokenize(text: string): Tok[] {
   const toks: Tok[] = [];
+  const pendingNote: string[] = [];
   let s = normalize(text);
   while (s.length) {
     // ключевая фраза
@@ -70,7 +72,7 @@ function tokenize(text: string): Tok[] {
     if (kw) {
       const m = kw.re.exec(s)!;
       const treatment = typeof kw.treatment === "function" ? kw.treatment(m) : kw.treatment ?? null;
-      toks.push({ kind: "kw", kw, treatment });
+      toks.push({ kind: "kw", kw, treatment, note: pendingNote.splice(0) });
       s = s.slice(m[0].length).trim();
       continue;
     }
@@ -105,12 +107,22 @@ function tokenize(text: string): Tok[] {
         continue;
       }
     }
-    s = rest; // прочие слова («зуб», «и», «нужно», «на»…) пропускаем
+    // прочие слова: служебные пропускаем, а уточнения после диагноза («дистально», «контакт»,
+    // «на жевательной поверхности») запоминаем как заметку к этому диагнозу
+    const lastTok = [...toks].reverse().find((t) => t.kind === "kw");
+    // «контактный кариес»: уточнение перед диагнозом
+    if (/^(контакт|дистал|медиал|жеватель|пришеечн|вестибуляр|оральн|н[её]бн|язычн|апроксимал|окклюз|глубок|средн|поверхностн)/.test(word) && !lastTok) {
+      pendingNote.push(word);
+      s = rest;
+      continue;
+    }
+    if (lastTok?.kind === "kw" && !/^(зуб\S*|и|у|в|нужн\S*|надо|есть|потом|затем|также|еще|ещё|номер)$/.test(word)) lastTok.note.push(word);
+    s = rest;
   }
   return toks;
 }
 
-type KwTok = { kw: Kw; treatment: string | null };
+type KwTok = { kw: Kw; treatment: string | null; note: string[] };
 type Run = { kind: "teeth"; teeth: number[] } | { kind: "kws"; kws: KwTok[] };
 
 function pairTokens(toks: Tok[]): DictatedItem[] {
@@ -121,7 +133,7 @@ function pairTokens(toks: Tok[]): DictatedItem[] {
       if (last?.kind === "teeth") last.teeth.push(t.n);
       else runs.push({ kind: "teeth", teeth: [t.n] });
     } else {
-      const k = { kw: t.kw, treatment: t.treatment };
+      const k = { kw: t.kw, treatment: t.treatment, note: t.note };
       if (last?.kind === "kws") last.kws.push(k);
       else runs.push({ kind: "kws", kws: [k] });
     }
@@ -135,9 +147,10 @@ function pairTokens(toks: Tok[]): DictatedItem[] {
     if (treatments.some((t) => /пульпит|периодонт/i.test(t))) treatments = treatments.filter((t) => !/реставрац/i.test(t));
     const statusKw = kws.find((k) => k.kw.noPlan && k.kw.status) ?? kws.find((k) => k.kw.status);
     const status = statusKw?.kw.status ?? null;
+    const note = kws.flatMap((k) => k.note).join(" ").trim() || null;
     for (const tooth of teeth) {
-      if (treatments.length) for (const tr of treatments) out.push({ tooth, status, diagnosis: null, treatment: tr });
-      else out.push({ tooth, status, diagnosis: null, treatment: null });
+      if (treatments.length) for (const tr of treatments) out.push({ tooth, status, diagnosis: null, treatment: tr, note });
+      else out.push({ tooth, status, diagnosis: null, treatment: null, note });
     }
   };
 
@@ -162,7 +175,7 @@ function pairTokens(toks: Tok[]): DictatedItem[] {
  */
 export function parseDictation(text: string): DictatedItem[] {
   // «пульпит 26 зуба 3 канала» → «26 пульпит 3 канала»
-  const prepared = text.replace(/(пульпит\S*|периодонтит\S*)\s+(\d{2})(?:\s*-?\s*(?:го|й))?\s+зуб\S*\s+(\S+\s+канал\S*)/gi, "$2 $1 $3");
+  const prepared = text.replace(/(\d)\s*[.,]\s*(\d)/g, "$1$2").replace(/(пульпит\S*|периодонтит\S*)\s+(\d{2})(?:\s*-?\s*(?:го|й))?\s+зуб\S*\s+(\S+\s+канал\S*)/gi, "$2 $1 $3");
   const segments = prepared
     .split(/[.;,!?\n]+|\s(?:а\s+также|также|далее|потом|затем|ещ[её])\s/i)
     .map((seg) => tokenize(seg))

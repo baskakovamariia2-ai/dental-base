@@ -25,8 +25,10 @@ export async function addTreatmentItem(patientId: string, formData: FormData) {
       patientId,
       toothNumber: tooth,
       treatment,
+      // одна заметка при добавлении заполняет обе строки; галочка — видно ли пациенту
       note: optStr(formData, "note", 1000),
-      internalNote: optStr(formData, "internalNote", 1000),
+      internalNote: optStr(formData, "internalNote", 1000) ?? optStr(formData, "note", 1000),
+      noteVisible: formData.has("noteVisibleSent") ? formData.get("noteVisible") === "on" : true,
       price: Math.max(0, int(formData, "price")),
       paid: Math.max(0, int(formData, "paid")),
       status: oneOf(formData, "status", values(TREATMENT_STATUS), "PLANNED"),
@@ -55,6 +57,7 @@ export async function updateTreatmentItem(id: string, formData: FormData) {
       treatment: str(formData, "treatment", 300) || item.treatment,
       note: formData.has("note") ? optStr(formData, "note", 1000) : item.note,
       internalNote: formData.has("internalNote") ? optStr(formData, "internalNote", 1000) : item.internalNote,
+      noteVisible: formData.has("noteVisibleSent") ? formData.get("noteVisible") === "on" : item.noteVisible,
     },
   });
   await syncToothWithPlan(item.patientId, item.toothNumber);

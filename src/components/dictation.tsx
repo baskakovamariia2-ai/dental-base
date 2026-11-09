@@ -63,7 +63,7 @@ export function DictationBox({ patientId }: { patientId: string }) {
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="font-medium">Надиктовать формулу</div>
-          <p className="text-sm text-ink-soft">Например: «36 37 кариес, 26 пульпит 3 канала, 46 периодонтит, 48 удаление, 11 коронка». Цены подставятся из прайса пациента.</p>
+          <p className="text-sm text-ink-soft">Например: «1.4 кариес дистально, 4.6 4.7 кариес контакт, 26 пульпит 3 канала, 48 удаление». Уточнения станут заметкой к зубу, цены — из прайса.</p>
         </div>
         <button
           type="button"
@@ -104,6 +104,7 @@ export function DictationBox({ patientId }: { patientId: string }) {
               <span className="w-8 font-semibold tabular-nums">{it.tooth ?? "—"}</span>
               <span className="min-w-0 flex-1 text-sm">
                 {it.treatment ? <span className="font-medium">{it.treatment}</span> : statusLabel(it.status)}
+                {it.note && <span className="block text-xs text-ink-mute">заметка: {it.note}</span>}
               </span>
             </label>
           ))}

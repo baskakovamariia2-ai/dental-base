@@ -43,6 +43,16 @@ export async function applyDictation(patientId: string, payload: string) {
   for (const it of items.slice(0, 100)) {
     const tooth = it.tooth !== null && isValidTooth(Number(it.tooth)) ? Number(it.tooth) : null;
     const status = it.status && values(TOOTH_STATUS).includes(it.status) ? it.status : null;
+    // заметка без лечения (например, «25 леченый, пломба старая») — к зубу
+    if (tooth !== null && !it.treatment && it.note) {
+      const t = await prisma.tooth.findUnique({ where: { patientId_number: { patientId, number: tooth } } });
+      const notes = [t?.notes, String(it.note).slice(0, 500)].filter(Boolean).join("; ");
+      await prisma.tooth.upsert({
+        where: { patientId_number: { patientId, number: tooth } },
+        create: { patientId, number: tooth, status: status ?? "HEALTHY", notes },
+        update: { notes },
+      });
+    }
     if (tooth !== null && status) {
       await prisma.tooth.upsert({
         where: { patientId_number: { patientId, number: tooth } },
@@ -58,6 +68,8 @@ export async function applyDictation(patientId: string, payload: string) {
           toothNumber: tooth,
           treatment,
           price: findPrice(treatment, prices) ?? 0,
+          note: it.note ? String(it.note).slice(0, 500) : null,
+          internalNote: it.note ? String(it.note).slice(0, 500) : null,
           sortOrder: order++,
         },
       });

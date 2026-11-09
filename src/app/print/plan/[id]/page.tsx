@@ -7,6 +7,7 @@ import { buildStages } from "@/lib/stages";
 import { fmtDate, money } from "@/lib/format";
 import { LOWER, UPPER, toothCategory } from "@/lib/teeth";
 import { CategoryLegend, ToothCellView } from "@/components/tooth-shape";
+import { OcclusalChart } from "@/components/occlusal-chart";
 import { PrintButton } from "@/components/print-button";
 
 export const dynamic = "force-dynamic";
@@ -54,6 +55,10 @@ export default async function PrintPlanPage({ params }: { params: Promise<{ id: 
           </div>
         </header>
 
+        <section className="mb-4 break-inside-avoid">
+          <OcclusalChart className="mx-auto w-full max-w-[260px]" categoryOf={cat} />
+        </section>
+
         <section className="mb-7 break-inside-avoid rounded-2xl border border-zinc-200 px-3 py-4">
           <div className="space-y-2">
             <Row list={UPPER} />
@@ -88,7 +93,7 @@ export default async function PrintPlanPage({ params }: { params: Promise<{ id: 
                             </td>
                             <td className="py-2">
                               {i.treatment}
-                              {i.note && <div className="text-[12px] text-zinc-500">{i.note}</div>}
+                              {i.note && i.noteVisible && <div className="text-[12px] text-zinc-500">{i.note}</div>}
                             </td>
                             <td className="py-2 text-right tabular-nums">{i.price ? money(i.price) : "—"}</td>
                           </tr>

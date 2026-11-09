@@ -43,16 +43,17 @@ export function TreatmentFields({ prices, compact }: { prices: { name: string; p
         <input name="price" inputMode="numeric" value={price} onChange={(e) => setPrice(e.target.value)} className="input" />
       </label>
       {!compact && (
-        <label className="block">
-          <span className="label">Заметка для пациента (видна в PDF)</span>
-          <input name="note" className="input" />
-        </label>
-      )}
-      {!compact && (
-        <label className="block">
-          <span className="label">🔒 Заметка для нас (пациент не видит)</span>
-          <input name="internalNote" className="input" />
-        </label>
+        <div className="space-y-1.5">
+          <label className="block">
+            <span className="label">Заметка (например, «кариес дистально»)</span>
+            <input name="note" className="input" />
+          </label>
+          <input type="hidden" name="noteVisibleSent" value="1" />
+          <label className="flex items-center gap-2 text-sm text-ink-soft">
+            <input type="checkbox" name="noteVisible" defaultChecked className="h-5 w-5 accent-teal-700" />
+            Показывать заметку пациенту в PDF
+          </label>
+        </div>
       )}
     </>
   );
