@@ -10,7 +10,7 @@ import { CategoryLegend, ToothCellView } from "./tooth-shape";
 import { TreatmentFields } from "./price-picker";
 import { findPrice } from "@/lib/treatments";
 
-export type ToothData = { number: number; status: ToothStatus; notes: string | null };
+export type ToothData = { number: number; status: ToothStatus; notes: string | null; patientNote?: string | null; patientNoteVisible?: boolean };
 export type PlanItemData = { id: string; toothNumber: number | null; treatment: string; price: number; status: TreatmentStatus; note?: string | null; internalNote?: string | null };
 export type PriceOption = { name: string; price: number };
 
@@ -19,7 +19,7 @@ const OPEN = (s: TreatmentStatus) => s === "PLANNED" || s === "IN_PROGRESS";
 export function Odontogram({ patientId, teeth, plan, prices }: { patientId: string; teeth: ToothData[]; plan: PlanItemData[]; prices: PriceOption[] }) {
   const [open, setOpen] = useState<number | null>(null);
   const map = new Map(teeth.map((t) => [t.number, t]));
-  const get = (n: number): ToothData => map.get(n) ?? { number: n, status: "HEALTHY", notes: null };
+  const get = (n: number): ToothData => map.get(n) ?? { number: n, status: "HEALTHY", notes: null, patientNote: null, patientNoteVisible: true };
   const planFor = (n: number) => plan.filter((p) => p.toothNumber === n && p.status !== "CANCELLED");
   const infoOf = buildToothInfo(teeth, plan);
   const cat = (n: number) => infoOf(n).category;
@@ -69,6 +69,10 @@ function ToothSheet({
   const [busy, setBusy] = useState(false);
   const [formKey, setFormKey] = useState(0);
   const [endoOpen, setEndoOpen] = useState(false);
+  // заметки: пока вторую строку не правили вручную, она повторяет первую
+  const [ourNote, setOurNote] = useState(tooth.notes ?? "");
+  const [ptNote, setPtNote] = useState(tooth.patientNote ?? "");
+  const [ptTouched, setPtTouched] = useState(Boolean(tooth.patientNote) && tooth.patientNote !== tooth.notes);
   const addPlan = (treatment: string) =>
     run(async () => {
       const fd = new FormData();
@@ -110,7 +114,6 @@ function ToothSheet({
               <span className="min-w-0 flex-1 text-[15px]">
                 {p.treatment}
                 <span className="block text-xs text-ink-mute">{p.price ? `${p.price.toLocaleString("ru-RU")} ₽` : "цена не указана"}</span>
-                {p.internalNote && <span className="block text-xs text-amber-700">🔒 {p.internalNote}</span>}
               </span>
               <form action={updateTreatmentItem.bind(null, p.id)}>
                 <select
@@ -206,7 +209,33 @@ function ToothSheet({
           )}
           <label className="block">
             <span className="label">🔒 Заметка о зубе (только для нас)</span>
-            <textarea name="notes" rows={2} defaultValue={tooth.notes ?? ""} className="input" />
+            <textarea
+              name="notes"
+              rows={2}
+              value={ourNote}
+              onChange={(e) => {
+                setOurNote(e.target.value);
+                if (!ptTouched) setPtNote(e.target.value);
+              }}
+              className="input"
+            />
+          </label>
+          <label className="block">
+            <span className="label">👤 Заметка для пациента (в PDF)</span>
+            <textarea
+              name="patientNote"
+              rows={2}
+              value={ptNote}
+              onChange={(e) => {
+                setPtNote(e.target.value);
+                setPtTouched(true);
+              }}
+              className="input"
+            />
+          </label>
+          <label className="flex items-center gap-2 text-sm text-ink-soft">
+            <input type="checkbox" name="patientNoteVisible" defaultChecked={tooth.patientNoteVisible ?? true} className="h-5 w-5 accent-teal-700" />
+            Показывать пациенту в PDF
           </label>
           <button disabled={busy} className="btn-secondary w-full">Сохранить заметку</button>
           <p className="text-xs text-ink-mute">Состояние сохраняется сразу. «Пульпит / периодонтит» и «Под удаление» сразу добавляют лечение в план. Если есть лечение в плане, зуб и так отмечен как проблемный.</p>

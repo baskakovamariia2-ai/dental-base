@@ -96,11 +96,12 @@ const canalsIn = (t: string) => {
 };
 
 export function buildToothInfo(
-  teeth: { number: number; status: ToothStatus }[],
+  teeth: { number: number; status: ToothStatus; notes?: string | null }[],
   items: { toothNumber: number | null; treatment: string; status: string; note?: string | null; internalNote?: string | null }[],
 ): (n: number) => ToothInfo {
   const open = items.filter((i) => i.toothNumber !== null && (i.status === "PLANNED" || i.status === "IN_PROGRESS"));
   const statusOf = new Map(teeth.map((t) => [t.number, t.status]));
+  const toothNote = new Map(teeth.map((t) => [t.number, t.notes ?? ""]));
   const cariesItems = (n: number) => open.filter((i) => i.toothNumber === n && RE_CARIES.test(i.treatment) && !/после лечения каналов/i.test(i.treatment));
   const hasCaries = (n: number | null) => n !== null && (cariesItems(n).length > 0 || statusOf.get(n) === "CARIES");
   const cache = new Map<number, ToothInfo>();
@@ -112,7 +113,7 @@ export function buildToothInfo(
     const canals = Math.max(1, ...mine.filter((i) => RE_ENDO.test(i.treatment) && !/реставрац/i.test(i.treatment)).map((i) => canalsIn(i.treatment) ?? 1));
     const sides = new Set<CariesSide>();
     for (const it of cariesItems(n)) {
-      const note = `${it.internalNote ?? ""} ${it.note ?? ""}`.toLowerCase();
+      const note = `${it.internalNote ?? ""} ${it.note ?? ""} ${toothNote.get(n) ?? ""}`.toLowerCase();
       if (/дистал/.test(note)) sides.add("d");
       if (/медиал/.test(note)) sides.add("m");
       if (/контакт|апроксим/.test(note)) {

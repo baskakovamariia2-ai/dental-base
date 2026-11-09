@@ -5,7 +5,7 @@ import { requireUser } from "@/lib/auth";
 import { patientStats, buildToothInfo, ALL_TEETH } from "@/lib/teeth";
 import { OcclusalChart } from "@/components/occlusal-chart";
 import { getReminderTemplate, reminderText } from "@/lib/reminder";
-import { applyCrownRules, applyEndoRules, fillMissingPrices } from "@/lib/plan";
+import { applyCrownRules, applyEndoRules, fillMissingPrices, moveItemNotesToTeeth } from "@/lib/plan";
 import { getSettings } from "@/lib/settings";
 import { buildStages } from "@/lib/stages";
 import { ReminderButton } from "@/components/reminder-button";
@@ -44,6 +44,7 @@ export default async function PatientPage({
   const { tab = "overview" } = await searchParams;
   const now = new Date();
   // цены из прайса подставляются в план автоматически (где цена ещё не указана)
+  await moveItemNotesToTeeth(id);
   await applyEndoRules(id);
   await fillMissingPrices({ patientIds: [id] });
   await applyCrownRules(id);
@@ -208,7 +209,7 @@ export default async function PatientPage({
             <Odontogram
               patientId={patient.id}
               prices={priceOptions}
-              teeth={patient.teeth.map((t) => ({ number: t.number, status: t.status, notes: t.notes }))}
+              teeth={patient.teeth.map((t) => ({ number: t.number, status: t.status, notes: t.notes, patientNote: t.patientNote, patientNoteVisible: t.patientNoteVisible }))}
               plan={planItems.map((i) => ({ id: i.id, toothNumber: i.toothNumber, treatment: i.treatment, price: i.price, status: i.status, note: i.note, internalNote: i.internalNote }))}
             />
           </div>
@@ -259,12 +260,7 @@ export default async function PatientPage({
                         <span className="text-[15px] font-semibold tabular-nums">{i.toothNumber ?? "—"}</span>
                         <span className="min-w-0 flex-1 text-[15px] md:flex-none">
                           {i.treatment}
-                          {i.internalNote && <span className="block text-xs text-amber-700">🔒 {i.internalNote}</span>}
-                      {i.note && (
-                        <span className={`block text-xs ${i.noteVisible ? "text-sky-700" : "text-ink-mute line-through"}`}>
-                          👤 {i.note}{i.noteVisible ? "" : " (скрыто от пациента)"}
-                        </span>
-                      )}
+    
                         </span>
                         <span className={`text-right text-[15px] font-medium tabular-nums ${i.price ? "" : "text-orange-600"}`}>{i.price ? money(i.price) : "нет цены"}</span>
                         <form action={updateTreatmentItem.bind(null, i.id)}>
@@ -286,13 +282,7 @@ export default async function PatientPage({
                           <summary className="cursor-pointer list-none rounded-lg px-2 py-1 text-xs text-ink-mute hover:bg-zinc-100">Изменить</summary>
                           <form action={updateTreatmentItem.bind(null, i.id)} className="mt-2 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-end">
                             <label className="col-span-2 block"><span className="label">Лечение</span><input name="treatment" defaultValue={i.treatment} className="input sm:w-56" /></label>
-                            <label className="col-span-2 block"><span className="label">🔒 Заметка для нас</span><input name="internalNote" defaultValue={i.internalNote ?? ""} className="input sm:w-56" /></label>
-                        <label className="col-span-2 block"><span className="label">👤 Заметка для пациента</span><input name="note" defaultValue={i.note ?? ""} className="input sm:w-56" /></label>
-                        <input type="hidden" name="noteVisibleSent" value="1" />
-                        <label className="col-span-2 flex items-center gap-2 text-sm text-ink-soft">
-                          <input type="checkbox" name="noteVisible" defaultChecked={i.noteVisible} className="h-5 w-5 accent-teal-700" />
-                          Видно пациенту в PDF
-                        </label>
+                            <label className="col-span-2 block"><span className="label">Комментарий к лечению в PDF (например, скидка)</span><input name="note" defaultValue={i.note ?? ""} className="input sm:w-56" /></label>
                             <label className="block"><span className="label">Цена</span><input name="price" inputMode="numeric" defaultValue={i.price} className="input sm:w-28" /></label>
                             <label className="block"><span className="label">Оплачено</span><input name="paid" inputMode="numeric" defaultValue={i.paid} className="input sm:w-28" /></label>
                             <button className="btn-primary btn-sm col-span-2 h-11">Сохранить</button>

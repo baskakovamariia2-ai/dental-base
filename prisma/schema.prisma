@@ -184,7 +184,9 @@ model Tooth {
   diagnosis       String?
   problem         String?
   treatment       String?
-  notes           String?
+  notes           String? // заметка о зубе — только для нас
+  patientNote     String? // заметка о зубе для пациента (в PDF)
+  patientNoteVisible Boolean @default(true)
   price           Int?
   treatmentStatus TreatmentStatus?
   updatedAt       DateTime         @updatedAt

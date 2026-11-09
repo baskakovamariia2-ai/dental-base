@@ -143,3 +143,23 @@ export async function applyCrownRules(patientId: string) {
     ]);
   }
 }
+
+/** Старые заметки, записанные в пункты плана при диктовке, переносим к зубу (для нас и для пациента) */
+export async function moveItemNotesToTeeth(patientId: string) {
+  const items = await prisma.treatmentItem.findMany({
+    where: { patientId, toothNumber: { not: null }, OR: [{ note: { not: null } }, { internalNote: { not: null } }] },
+  });
+  for (const it of items) {
+    const text = (it.internalNote ?? it.note ?? "").trim();
+    if (!text || /скидка/i.test(text)) continue;
+    const n = it.toothNumber as number;
+    const t = await prisma.tooth.findUnique({ where: { patientId_number: { patientId, number: n } } });
+    const add = (old: string | null | undefined) => (old && old.toLowerCase().includes(text.toLowerCase()) ? old : [old, text].filter(Boolean).join("; "));
+    await prisma.tooth.upsert({
+      where: { patientId_number: { patientId, number: n } },
+      create: { patientId, number: n, notes: text, patientNote: it.note ? text : null, patientNoteVisible: it.noteVisible },
+      update: { notes: add(t?.notes), ...(it.note ? { patientNote: add(t?.patientNote), patientNoteVisible: it.noteVisible } : {}) },
+    });
+    await prisma.treatmentItem.update({ where: { id: it.id }, data: { note: null, internalNote: null } });
+  }
+}

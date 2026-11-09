@@ -28,6 +28,14 @@ export default async function PrintPlanPage({ params }: { params: Promise<{ id: 
   const total = items.reduce((s, i) => s + i.price, 0);
   const statusOf = new Map<number, ToothStatus>(patient.teeth.map((t) => [t.number, t.status] as [number, ToothStatus]));
   const infoOf = buildToothInfo(patient.teeth, items);
+  // заметка о зубе для пациента — один раз, под первой строкой этого зуба
+  const ptNote = new Map(patient.teeth.filter((t) => t.patientNoteVisible && t.patientNote?.trim()).map((t) => [t.number, t.patientNote!.trim()] as [number, string]));
+  const noteShown = new Set<number>();
+  const toothNoteFor = (n: number | null) => {
+    if (n === null || noteShown.has(n) || !ptNote.has(n)) return null;
+    noteShown.add(n);
+    return ptNote.get(n)!;
+  };
   const cat = (n: number) => infoOf(n).category;
 
   const Row = ({ list }: { list: number[] }) => (
@@ -94,6 +102,7 @@ export default async function PrintPlanPage({ params }: { params: Promise<{ id: 
                             </td>
                             <td className="py-2">
                               {i.treatment}
+                              {(() => { const tn = toothNoteFor(i.toothNumber); return tn ? <div className="text-[12px] text-zinc-500">{tn}</div> : null; })()}
                               {i.note && i.noteVisible && <div className="text-[12px] text-zinc-500">{i.note}</div>}
                             </td>
                             <td className="py-2 text-right tabular-nums">{i.price ? money(i.price) : "—"}</td>

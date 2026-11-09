@@ -1,5 +1,6 @@
 "use server";
 
+import type { ToothStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
@@ -17,6 +18,8 @@ export async function saveTooth(patientId: string, number: number, formData: For
   const data = {
     ...(hasStatus ? { status: oneOf(formData, "status", values(TOOTH_STATUS), "HEALTHY") } : {}),
     notes: optStr(formData, "notes", 3000),
+    patientNote: optStr(formData, "patientNote", 3000),
+    patientNoteVisible: formData.get("patientNoteVisible") === "on",
   };
   await prisma.tooth.upsert({
     where: { patientId_number: { patientId, number } },
@@ -24,6 +27,16 @@ export async function saveTooth(patientId: string, number: number, formData: For
     update: data,
   });
   revalidatePath(`/patients/${patientId}`);
+}
+
+async function appendToothNote(patientId: string, number: number, note: string, status: ToothStatus | null = null) {
+  const t = await prisma.tooth.findUnique({ where: { patientId_number: { patientId, number } } });
+  const add = (old: string | null | undefined) => (old && old.toLowerCase().includes(note.toLowerCase()) ? old : [old, note].filter(Boolean).join("; "));
+  await prisma.tooth.upsert({
+    where: { patientId_number: { patientId, number } },
+    create: { patientId, number, status: status ?? "HEALTHY", notes: note, patientNote: note },
+    update: { notes: add(t?.notes), patientNote: add(t?.patientNote) },
+  });
 }
 
 /** Применить надиктованную формулу: обновить зубы и составить план */
@@ -43,15 +56,9 @@ export async function applyDictation(patientId: string, payload: string) {
   for (const it of items.slice(0, 100)) {
     const tooth = it.tooth !== null && isValidTooth(Number(it.tooth)) ? Number(it.tooth) : null;
     const status = it.status && values(TOOTH_STATUS).includes(it.status) ? it.status : null;
-    // заметка без лечения (например, «25 леченый, пломба старая») — к зубу
-    if (tooth !== null && !it.treatment && it.note) {
-      const t = await prisma.tooth.findUnique({ where: { patientId_number: { patientId, number: tooth } } });
-      const notes = [t?.notes, String(it.note).slice(0, 500)].filter(Boolean).join("; ");
-      await prisma.tooth.upsert({
-        where: { patientId_number: { patientId, number: tooth } },
-        create: { patientId, number: tooth, status: status ?? "HEALTHY", notes },
-        update: { notes },
-      });
+    // уточнение («дистально», «контакт») — заметка к зубу, сразу в обе строки: для нас и для пациента
+    if (tooth !== null && it.note) {
+      await appendToothNote(patientId, tooth, String(it.note).slice(0, 500), status);
     }
     if (tooth !== null && status) {
       await prisma.tooth.upsert({
@@ -68,8 +75,6 @@ export async function applyDictation(patientId: string, payload: string) {
           toothNumber: tooth,
           treatment,
           price: findPrice(treatment, prices) ?? 0,
-          note: it.note ? String(it.note).slice(0, 500) : null,
-          internalNote: it.note ? String(it.note).slice(0, 500) : null,
           sortOrder: order++,
         },
       });
