@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
-import { patientStats, toothCategory, ALL_TEETH } from "@/lib/teeth";
+import { patientStats, buildToothInfo, ALL_TEETH } from "@/lib/teeth";
 import { OcclusalChart } from "@/components/occlusal-chart";
 import { getReminderTemplate, reminderText } from "@/lib/reminder";
 import { applyCrownRules, applyEndoRules, fillMissingPrices } from "@/lib/plan";
@@ -200,12 +200,7 @@ export default async function PatientPage({
           <div className="card card-pad">
             <OcclusalChart
               className="mx-auto w-full max-w-[300px]"
-              categoryOf={(n) =>
-                toothCategory(
-                  patient.teeth.find((t) => t.number === n)?.status ?? "HEALTHY",
-                  planItems.filter((i) => i.toothNumber === n && (i.status === "PLANNED" || i.status === "IN_PROGRESS")).map((i) => i.treatment),
-                )
-              }
+              infoOf={buildToothInfo(patient.teeth, planItems)}
             />
           </div>
           <div>

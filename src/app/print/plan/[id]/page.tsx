@@ -5,7 +5,7 @@ import { requireUser } from "@/lib/auth";
 import { getSettings } from "@/lib/settings";
 import { buildStages } from "@/lib/stages";
 import { fmtDate, money } from "@/lib/format";
-import { LOWER, UPPER, toothCategory } from "@/lib/teeth";
+import { LOWER, UPPER, buildToothInfo } from "@/lib/teeth";
 import { CategoryLegend, ToothCellView } from "@/components/tooth-shape";
 import { OcclusalChart } from "@/components/occlusal-chart";
 import { PrintButton } from "@/components/print-button";
@@ -27,13 +27,14 @@ export default async function PrintPlanPage({ params }: { params: Promise<{ id: 
   const items = patient.treatmentItems.filter((i) => i.status === "PLANNED" || i.status === "IN_PROGRESS");
   const total = items.reduce((s, i) => s + i.price, 0);
   const statusOf = new Map<number, ToothStatus>(patient.teeth.map((t) => [t.number, t.status] as [number, ToothStatus]));
-  const cat = (n: number) => toothCategory(statusOf.get(n) ?? "HEALTHY", items.filter((i) => i.toothNumber === n).map((i) => i.treatment));
+  const infoOf = buildToothInfo(patient.teeth, items);
+  const cat = (n: number) => infoOf(n).category;
 
   const Row = ({ list }: { list: number[] }) => (
     <div className="grid grid-cols-[repeat(16,minmax(0,1fr))] gap-[3px]">
       {list.map((n, i) => (
         <div key={n} className={i === 7 ? "mr-2" : ""}>
-          <ToothCellView number={n} category={cat(n)} small />
+          <ToothCellView number={n} category={cat(n)} info={infoOf(n)} small />
         </div>
       ))}
     </div>
@@ -56,7 +57,7 @@ export default async function PrintPlanPage({ params }: { params: Promise<{ id: 
         </header>
 
         <section className="mb-4 break-inside-avoid">
-          <OcclusalChart className="mx-auto w-full max-w-[260px]" categoryOf={cat} />
+          <OcclusalChart className="mx-auto w-full max-w-[260px]" infoOf={infoOf} />
         </section>
 
         <section className="mb-7 break-inside-avoid rounded-2xl border border-zinc-200 px-3 py-4">

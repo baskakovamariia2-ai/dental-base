@@ -72,3 +72,60 @@ export function patientStats(
     missing: cats.missing,
   };
 }
+
+// ── Детали для схем: сколько каналов и где кариес (медиально / дистально / жевательная) ──
+
+export type CariesSide = "m" | "d" | "c";
+export type ToothInfo = { category: ToothCategory; canals: number; caries: CariesSide[] };
+
+/** Сосед в сторону середины (медиальный) и наружу (дистальный) */
+export function mesialNeighbor(n: number): number | null {
+  const q = Math.floor(n / 10), d = n % 10;
+  if (d > 1) return n - 1;
+  return { 1: 21, 2: 11, 3: 41, 4: 31 }[q] ?? null;
+}
+export function distalNeighbor(n: number): number | null {
+  return n % 10 < 8 ? n + 1 : null;
+}
+
+const canalsIn = (t: string) => {
+  const m = /(\d|один|одного|два|двух|три|тр[её]х|четыре|четыр[её]х)\s*-?\s*канал/i.exec(t);
+  if (!m) return null;
+  const w: Record<string, number> = { один: 1, одного: 1, два: 2, двух: 2, три: 3, трех: 3, трёх: 3, четыре: 4, четырех: 4, четырёх: 4 };
+  return /^\d$/.test(m[1]) ? Number(m[1]) : w[m[1].toLowerCase()] ?? null;
+};
+
+export function buildToothInfo(
+  teeth: { number: number; status: ToothStatus }[],
+  items: { toothNumber: number | null; treatment: string; status: string; note?: string | null; internalNote?: string | null }[],
+): (n: number) => ToothInfo {
+  const open = items.filter((i) => i.toothNumber !== null && (i.status === "PLANNED" || i.status === "IN_PROGRESS"));
+  const statusOf = new Map(teeth.map((t) => [t.number, t.status]));
+  const cariesItems = (n: number) => open.filter((i) => i.toothNumber === n && RE_CARIES.test(i.treatment) && !/после лечения каналов/i.test(i.treatment));
+  const hasCaries = (n: number | null) => n !== null && (cariesItems(n).length > 0 || statusOf.get(n) === "CARIES");
+  const cache = new Map<number, ToothInfo>();
+  return (n: number) => {
+    const hit = cache.get(n);
+    if (hit) return hit;
+    const mine = open.filter((i) => i.toothNumber === n);
+    const category = toothCategory(statusOf.get(n) ?? "HEALTHY", mine.map((i) => i.treatment));
+    const canals = Math.max(1, ...mine.filter((i) => RE_ENDO.test(i.treatment) && !/реставрац/i.test(i.treatment)).map((i) => canalsIn(i.treatment) ?? 1));
+    const sides = new Set<CariesSide>();
+    for (const it of cariesItems(n)) {
+      const note = `${it.internalNote ?? ""} ${it.note ?? ""}`.toLowerCase();
+      if (/дистал/.test(note)) sides.add("d");
+      if (/медиал/.test(note)) sides.add("m");
+      if (/контакт|апроксим/.test(note)) {
+        const m = hasCaries(mesialNeighbor(n)), d = hasCaries(distalNeighbor(n));
+        if (m) sides.add("m");
+        if (d) sides.add("d");
+        if (!m && !d) sides.add("d");
+      }
+      if (/жеват|окклюз/.test(note) || !/дистал|медиал|контакт|апроксим/.test(note)) sides.add("c");
+    }
+    if (!sides.size && category === "caries") sides.add("c");
+    const info = { category, canals, caries: [...sides] };
+    cache.set(n, info);
+    return info;
+  };
+}

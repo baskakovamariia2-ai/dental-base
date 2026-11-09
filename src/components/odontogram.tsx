@@ -5,7 +5,7 @@ import type { ToothStatus, TreatmentStatus } from "@prisma/client";
 import { saveTooth } from "@/actions/teeth";
 import { addTreatmentItem, deleteTreatmentItem, updateTreatmentItem } from "@/actions/treatment";
 import { TREATMENT_STATUS } from "@/lib/labels";
-import { CATEGORY_STYLE, LOWER, UPPER, toothCategory, type ToothCategory } from "@/lib/teeth";
+import { CATEGORY_STYLE, LOWER, UPPER, buildToothInfo, type ToothCategory } from "@/lib/teeth";
 import { CategoryLegend, ToothCellView } from "./tooth-shape";
 import { TreatmentFields } from "./price-picker";
 import { findPrice } from "@/lib/treatments";
@@ -21,7 +21,8 @@ export function Odontogram({ patientId, teeth, plan, prices }: { patientId: stri
   const map = new Map(teeth.map((t) => [t.number, t]));
   const get = (n: number): ToothData => map.get(n) ?? { number: n, status: "HEALTHY", notes: null };
   const planFor = (n: number) => plan.filter((p) => p.toothNumber === n && p.status !== "CANCELLED");
-  const cat = (n: number) => toothCategory(get(n).status, planFor(n).filter((p) => OPEN(p.status)).map((p) => p.treatment));
+  const infoOf = buildToothInfo(teeth, plan);
+  const cat = (n: number) => infoOf(n).category;
 
   const Jaw = ({ list }: { list: number[] }) => (
     <div className="grid grid-cols-8 gap-1 sm:grid-cols-[repeat(16,minmax(0,1fr))]">
@@ -33,7 +34,7 @@ export function Odontogram({ patientId, teeth, plan, prices }: { patientId: stri
           className={`rounded-xl transition active:scale-95 ${open === n ? "ring-2 ring-ink" : ""} ${i === 7 ? "sm:mr-2" : ""}`}
           aria-label={`Зуб ${n}`}
         >
-          <ToothCellView number={n} category={cat(n)} />
+          <ToothCellView number={n} category={cat(n)} info={infoOf(n)} />
         </button>
       ))}
     </div>

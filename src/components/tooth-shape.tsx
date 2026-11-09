@@ -1,4 +1,4 @@
-import { CATEGORY_STYLE, COLOR, isUpper, toothKind, type ToothCategory } from "@/lib/teeth";
+import { CATEGORY_STYLE, COLOR, isUpper, toothKind, type ToothCategory, type ToothInfo } from "@/lib/teeth";
 
 // Контуры зубов нарисованы для верхней челюсти (корни вверх, коронка внизу).
 // Для нижней челюсти отражаем по вертикали.
@@ -19,7 +19,12 @@ const CANALS: Record<keyof typeof PATHS, [number, number, number, number][]> = {
   molarLower: [[12, 12, 14.5, 46], [28, 12, 25.5, 46]],
 };
 
-export function ToothIcon({ number, category, className = "h-14 w-7" }: { number: number; category: ToothCategory; className?: string }) {
+// Ширина области корней, по которой раскладываются полоски каналов
+const ROOT_SPAN: Record<string, number> = { incisor: 6, canine: 6, premolar: 9, molarUpper: 18, molarLower: 15 };
+// Медиальная сторона на развороте: 1x и 4x — вправо, 2x и 3x — влево
+const linearMesial = (n: number) => (Math.floor(n / 10) === 1 || Math.floor(n / 10) === 4 ? 1 : -1);
+
+export function ToothIcon({ number, category, info, className = "h-14 w-7" }: { number: number; category: ToothCategory; info?: ToothInfo; className?: string }) {
   const kind = toothKind(number);
   const upper = isUpper(number);
   const key: keyof typeof PATHS = kind === "molar" ? (upper ? "molarUpper" : "molarLower") : kind;
@@ -36,10 +41,22 @@ export function ToothIcon({ number, category, className = "h-14 w-7" }: { number
           strokeDasharray={category === "missing" ? "3 3" : undefined}
         />
         {category === "endo" &&
-          CANALS[key].map(([x1, y1, x2, y2], i) => (
-            <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke={COLOR.endo} strokeWidth={4} strokeLinecap="round" />
-          ))}
-        {category === "caries" && <rect x={kind === "molar" ? 9 : 14} y={56} width={11} height={11} rx={1.5} fill={COLOR.caries} />}
+          (info
+            ? Array.from({ length: info.canals }, (_, i) => {
+                const span = ROOT_SPAN[key] * Math.min(1, (info.canals - 1) / 2 + 0.3);
+                const x = info.canals === 1 ? 20 : 20 - span / 2 + (span * i) / (info.canals - 1);
+                return <line key={i} x1={x} y1={12} x2={x} y2={50} stroke={COLOR.endo} strokeWidth={info.canals > 2 ? 3 : 4} strokeLinecap="round" />;
+              })
+            : CANALS[key].map(([x1, y1, x2, y2], i) => (
+                <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke={COLOR.endo} strokeWidth={4} strokeLinecap="round" />
+              )))}
+        {category === "caries" &&
+          (info?.caries.length ? info.caries : ["c" as const]).map((side) => {
+            const half = kind === "molar" ? 13 : kind === "premolar" ? 10 : 7.5;
+            const size = kind === "molar" || kind === "premolar" ? 10 : 8;
+            const cx = side === "c" ? 20 : 20 + (side === "m" ? linearMesial(number) : -linearMesial(number)) * (half - size / 2);
+            return <rect key={side} x={cx - size / 2} y={58} width={size} height={size} rx={1.5} fill={COLOR.caries} />;
+          })}
       </g>
       {category === "extract" && <path d="M5 16 L35 66 M35 16 L5 66" stroke={COLOR.cross} strokeWidth={2.8} strokeLinecap="round" />}
     </svg>
@@ -47,14 +64,14 @@ export function ToothIcon({ number, category, className = "h-14 w-7" }: { number
 }
 
 /** Ячейка схемы: подложка по группе + номер (сверху у нижней челюсти, снизу у верхней) */
-export function ToothCellView({ number, category, small }: { number: number; category: ToothCategory; small?: boolean }) {
+export function ToothCellView({ number, category, info, small }: { number: number; category: ToothCategory; info?: ToothInfo; small?: boolean }) {
   const upper = isUpper(number);
   const st = CATEGORY_STYLE[category];
   const num = <span className={`${small ? "text-[9px]" : "text-[12px]"} font-semibold tabular-nums text-zinc-700`}>{number}</span>;
   return (
     <span className={`flex w-full flex-col items-center justify-center gap-0.5 rounded-xl ${small ? "py-1" : "py-1.5"}`} style={{ background: st.bg }}>
       {!upper && num}
-      <ToothIcon number={number} category={category} className={small ? "h-10 w-5" : "h-12 w-6 sm:h-14 sm:w-7"} />
+      <ToothIcon number={number} category={category} info={info} className={small ? "h-10 w-5" : "h-12 w-6 sm:h-14 sm:w-7"} />
       {upper && num}
     </span>
   );

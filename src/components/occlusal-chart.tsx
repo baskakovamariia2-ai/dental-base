@@ -1,4 +1,4 @@
-import { COLOR, LOWER, UPPER, toothKind, type ToothCategory } from "@/lib/teeth";
+import { COLOR, LOWER, UPPER, toothKind, type ToothInfo } from "@/lib/teeth";
 
 // Вид зубов во рту сверху (как на анатомической схеме): дёсны, нёбо, язык, зубы плотно по дуге.
 // Обозначения как на развороте: кариес — зелёный квадратик, пульпит/периодонтит — бирюзовая полоска,
@@ -12,7 +12,7 @@ const B = 205; // полувысота дуги
 const CY_UP = 262;
 const CY_LOW = 298;
 
-const DEPTH: Record<string, number> = { molar: 30, premolar: 25, canine: 23, incisor: 21 };
+const DEPTH: Record<string, number> = { molar: 33, premolar: 28, canine: 26, incisor: 23 };
 const WEIGHT: Record<string, number> = { molar: 1.5, premolar: 1.08, canine: 0.98, incisor: 1 };
 
 const pt = (th: number, upper: boolean, a = A, b = B) => ({
@@ -57,7 +57,7 @@ function place(list: number[], upper: boolean): Placed[] {
     // угол касательной: ширина зуба — вдоль дуги, глубина — к центру
     const rot = (Math.atan2(B * Math.cos(th), -A * Math.sin(th)) * 180) / Math.PI;
     const o = pt(th, upper, A + 44, B + 44);
-    return { n, x, y, rot, width: segLen * 0.96, depth: DEPTH[toothKind(n)], lx: o.x, ly: o.y };
+    return { n, x, y, rot, width: segLen * 0.98, depth: DEPTH[toothKind(n)], lx: o.x, ly: o.y };
   });
 }
 
@@ -70,42 +70,71 @@ function ringPath(upper: boolean, inset: number) {
   return pts;
 }
 
-function Tooth({ p, cat, upper }: { p: Placed; cat: ToothCategory; upper: boolean }) {
+// Медиальная сторона (к середине) в локальных координатах зуба: +x или −x
+function mesialSign(n: number) {
+  const q = Math.floor(n / 10);
+  return q === 1 || q === 3 ? 1 : -1;
+}
+
+/** Контур зуба (вид с жевательной стороны). Локально: x — вдоль дуги, y — внутрь рта. */
+function outline(kind: string, w: number, d: number) {
+  const f = (x: number) => x.toFixed(1);
+  if (kind === "molar") {
+    // четыре бугра: ромбовидный «квадрат» с перехватами между буграми
+    return `M${f(-0.82 * w)} ${f(-d)} Q${f(-0.42 * w)} ${f(-1.1 * d)} ${f(0)} ${f(-0.9 * d)} Q${f(0.42 * w)} ${f(-1.1 * d)} ${f(0.84 * w)} ${f(-0.98 * d)} C${f(1.04 * w)} ${f(-0.78 * d)} ${f(1.04 * w)} ${f(-0.18 * d)} ${f(0.94 * w)} ${f(0.02 * d)} C${f(1.02 * w)} ${f(0.25 * d)} ${f(1.0 * w)} ${f(0.82 * d)} ${f(0.78 * w)} ${f(d)} Q${f(0.38 * w)} ${f(1.08 * d)} ${f(0)} ${f(0.9 * d)} Q${f(-0.38 * w)} ${f(1.08 * d)} ${f(-0.8 * w)} ${f(0.98 * d)} C${f(-1.02 * w)} ${f(0.8 * d)} ${f(-1.02 * w)} ${f(0.25 * d)} ${f(-0.94 * w)} ${f(0.02 * d)} C${f(-1.04 * w)} ${f(-0.2 * d)} ${f(-1.04 * w)} ${f(-0.8 * d)} ${f(-0.82 * w)} ${f(-d)} Z`;
+  }
+  if (kind === "premolar") {
+    // овальный, вытянут щёчно-язычно, с лёгкой «талией»
+    return `M${f(0)} ${f(-d)} C${f(0.7 * w)} ${f(-d)} ${f(0.98 * w)} ${f(-0.55 * d)} ${f(0.92 * w)} ${f(0)} C${f(0.98 * w)} ${f(0.55 * d)} ${f(0.62 * w)} ${f(d)} ${f(0)} ${f(d)} C${f(-0.62 * w)} ${f(d)} ${f(-0.98 * w)} ${f(0.55 * d)} ${f(-0.92 * w)} ${f(0)} C${f(-0.98 * w)} ${f(-0.55 * d)} ${f(-0.7 * w)} ${f(-d)} ${f(0)} ${f(-d)} Z`;
+  }
+  if (kind === "canine") {
+    // клык: скруглённый ромб с выступающим бугром наружу
+    return `M${f(0)} ${f(-1.05 * d)} C${f(0.5 * w)} ${f(-0.95 * d)} ${f(0.98 * w)} ${f(-0.45 * d)} ${f(0.95 * w)} ${f(0.05 * d)} C${f(0.9 * w)} ${f(0.55 * d)} ${f(0.45 * w)} ${f(0.98 * d)} ${f(0)} ${f(d)} C${f(-0.45 * w)} ${f(0.98 * d)} ${f(-0.9 * w)} ${f(0.55 * d)} ${f(-0.95 * w)} ${f(0.05 * d)} C${f(-0.98 * w)} ${f(-0.45 * d)} ${f(-0.5 * w)} ${f(-0.95 * d)} ${f(0)} ${f(-1.05 * d)} Z`;
+  }
+  // резец: веер — широкий режущий край снаружи, узкий бугорок внутри
+  return `M${f(-w)} ${f(-0.7 * d)} Q${f(0)} ${f(-1.12 * d)} ${f(w)} ${f(-0.7 * d)} C${f(0.95 * w)} ${f(-0.1 * d)} ${f(0.5 * w)} ${f(0.92 * d)} ${f(0)} ${f(d)} C${f(-0.5 * w)} ${f(0.92 * d)} ${f(-0.95 * w)} ${f(-0.1 * d)} ${f(-w)} ${f(-0.7 * d)} Z`;
+}
+
+function fissures(kind: string, w: number, d: number) {
+  const f = (x: number) => x.toFixed(1);
+  if (kind === "molar")
+    return `M${f(-0.55 * w)} ${f(-0.05 * d)} Q${f(-0.1 * w)} ${f(-0.18 * d)} ${f(0.05 * w)} ${f(0)} Q${f(0.25 * w)} ${f(0.15 * d)} ${f(0.55 * w)} ${f(0.02 * d)} M${f(0)} ${f(-0.72 * d)} Q${f(-0.08 * w)} ${f(-0.35 * d)} ${f(0.02 * w)} ${f(-0.02 * d)} M${f(0.08 * w)} ${f(0.05 * d)} Q${f(0.12 * w)} ${f(0.4 * d)} ${f(0.02 * w)} ${f(0.72 * d)}`;
+  if (kind === "premolar") return `M${f(-0.5 * w)} ${f(0.02 * d)} Q${f(0)} ${f(0.18 * d)} ${f(0.5 * w)} ${f(0.02 * d)}`;
+  if (kind === "canine") return `M${f(0)} ${f(-0.78 * d)} Q${f(0.08 * w)} ${f(-0.1 * d)} ${f(0)} ${f(0.55 * d)}`;
+  return `M${f(-0.32 * w)} ${f(0.42 * d)} Q${f(0)} ${f(0.62 * d)} ${f(0.32 * w)} ${f(0.42 * d)}`;
+}
+
+function Tooth({ p, info }: { p: Placed; info: ToothInfo }) {
   const kind = toothKind(p.n);
+  const cat = info.category;
   const w = p.width / 2;
   const d = p.depth / 2;
   const fill = cat === "treated" ? "#8B6CFB" : cat === "missing" ? "#F4F4F5" : "#FFFFFF";
-  const stroke = cat === "missing" ? "#C4C4CC" : "#6B6B75";
-  // внутрь рта — к центру дуги: у верхних зубов это +y в локальных координатах, у нижних −y
-  const inward = 1; // поворот уже направляет локальную ось +y внутрь рта
-  let shape: string;
-  if (kind === "incisor" || kind === "canine") {
-    // клиновидные резцы и клыки: широкий край наружу, узкий внутрь
-    const inner = kind === "incisor" ? 0.55 : 0.4;
-    shape = `M${-w} ${-d * inward} L${w} ${-d * inward} Q${w * 0.9} ${d * 0.2 * inward} ${w * inner} ${d * inward} L${-w * inner} ${d * inward} Q${-w * 0.9} ${d * 0.2 * inward} ${-w} ${-d * inward} Z`;
-  } else {
-    const r = kind === "molar" ? 7 : 8;
-    shape = `M${-w + r} ${-d} H${w - r} Q${w} ${-d} ${w} ${-d + r} V${d - r} Q${w} ${d} ${w - r} ${d} H${-w + r} Q${-w} ${d} ${-w} ${d - r} V${-d + r} Q${-w} ${-d} ${-w + r} ${-d} Z`;
-  }
+  const stroke = cat === "missing" ? "#C4C4CC" : "#55555E";
+  const ms = mesialSign(p.n);
+  const sq = Math.min(10, w * 0.62);
   return (
     <g transform={`translate(${p.x.toFixed(1)} ${p.y.toFixed(1)}) rotate(${p.rot.toFixed(1)})`}>
-      <path d={shape} fill={fill} stroke={stroke} strokeWidth={1.1} strokeLinejoin="round" strokeDasharray={cat === "missing" ? "3 2" : undefined} />
-      {/* бороздки жевательной поверхности */}
-      {cat !== "treated" && cat !== "missing" && kind === "molar" && (
-        <path d={`M${-w * 0.45} ${-d * 0.1} Q0 ${-d * 0.45} ${w * 0.45} ${-d * 0.1} M0 ${-d * 0.35} Q${w * 0.08} ${d * 0.1} ${-w * 0.05} ${d * 0.5} M${-w * 0.45} ${d * 0.35} Q0 ${d * 0.05} ${w * 0.4} ${d * 0.4}`} fill="none" stroke="#A1A1AA" strokeWidth={0.9} strokeLinecap="round" />
-      )}
-      {cat !== "treated" && cat !== "missing" && kind === "premolar" && (
-        <path d={`M${-w * 0.45} 0 Q0 ${-d * 0.3} ${w * 0.45} 0`} fill="none" stroke="#A1A1AA" strokeWidth={0.9} strokeLinecap="round" />
-      )}
-      {cat === "caries" && <rect x={-5} y={-5} width={10} height={10} rx={1.5} fill={COLOR.caries} />}
-      {cat === "endo" && <line x1={0} y1={-d + 3} x2={0} y2={d - 3} stroke={COLOR.endo} strokeWidth={4} strokeLinecap="round" />}
+      <path d={outline(kind, w, d)} fill={fill} stroke={stroke} strokeWidth={1.15} strokeLinejoin="round" strokeDasharray={cat === "missing" ? "3 2" : undefined} />
+      {cat !== "treated" && cat !== "missing" && <path d={fissures(kind, w, d)} fill="none" stroke="#9A9AA3" strokeWidth={0.9} strokeLinecap="round" />}
+      {cat === "caries" &&
+        info.caries.map((side) => {
+          const cx = side === "c" ? 0 : (side === "m" ? ms : -ms) * (w - sq / 2 - 1.5);
+          return <rect key={side} x={cx - sq / 2} y={-sq / 2} width={sq} height={sq} rx={1.5} fill={COLOR.caries} />;
+        })}
+      {cat === "endo" &&
+        Array.from({ length: info.canals }, (_, i) => {
+          const span = Math.min(w * 1.1, 6 * (info.canals - 1));
+          const x = info.canals === 1 ? 0 : -span / 2 + (span * i) / (info.canals - 1);
+          return <line key={i} x1={x} y1={-d * 0.62} x2={x} y2={d * 0.62} stroke={COLOR.endo} strokeWidth={3.2} strokeLinecap="round" />;
+        })}
       {cat === "extract" && <path d={`M${-w} ${-d} L${w} ${d} M${w} ${-d} L${-w} ${d}`} stroke={COLOR.cross} strokeWidth={2.4} strokeLinecap="round" />}
       {cat === "problem" && <circle r={4} fill="#E8384F" />}
     </g>
   );
 }
 
-export function OcclusalChart({ categoryOf, className = "" }: { categoryOf: (n: number) => ToothCategory; className?: string }) {
+export function OcclusalChart({ infoOf, className = "" }: { infoOf: (n: number) => ToothInfo; className?: string }) {
   const up = place(UPPER, true);
   const low = place(LOWER, false);
 
@@ -137,8 +166,8 @@ export function OcclusalChart({ categoryOf, className = "" }: { categoryOf: (n: 
         <path key={i} d={`M${CX - 10 + i} ${CY_LOW + 60 + i * 24} h${20 - i * 2}`} stroke="#D6A0B0" strokeWidth={1.2} strokeLinecap="round" />
       ))}
 
-      {up.map((p) => <Tooth key={p.n} p={p} cat={categoryOf(p.n)} upper />)}
-      {low.map((p) => <Tooth key={p.n} p={p} cat={categoryOf(p.n)} upper={false} />)}
+      {up.map((p) => <Tooth key={p.n} p={p} info={infoOf(p.n)} />)}
+      {low.map((p) => <Tooth key={p.n} p={p} info={infoOf(p.n)} />)}
       {[...up, ...low].map((p) => (
         <text key={`l${p.n}`} x={p.lx} y={p.ly} textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight={600} fill="#3F3F46">
           {p.n}
