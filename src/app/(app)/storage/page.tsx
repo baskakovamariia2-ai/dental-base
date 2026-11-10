@@ -75,7 +75,7 @@ export default async function StoragePage() {
             <div className="bg-emerald-500" style={{ width: seg(dbSize) }} title="База" />
             <div className="bg-zinc-400" style={{ width: seg(Math.max(0, disk.used - filesWithBackup - dbSize)) }} title="Система" />
           </div>
-          <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
+          <div className="grid gap-x-6 gap-y-1.5 text-sm sm:grid-cols-2">
             <Legend color="bg-sky-500" label="Фото (с копией)" value={fmt(photos * 2)} />
             <Legend color="bg-violet-500" label="Рентген, документы" value={fmt(otherFiles * 2)} />
             <Legend color="bg-emerald-500" label="База (тексты)" value={fmt(dbSize)} />

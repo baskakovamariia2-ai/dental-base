@@ -1,0 +1,9 @@
+# Адреса приложения. Сертификаты HTTPS Caddy получает сам.
+{$APP_DOMAIN} {
+	reverse_proxy app:3000
+}
+
+# Копия для второго врача (работает, если в .env задан FRIEND_DOMAIN)
+{$FRIEND_DOMAIN} {
+	reverse_proxy friend:3000
+}

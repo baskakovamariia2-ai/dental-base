@@ -17,6 +17,7 @@ services:
 
   app:
     build: .
+    image: dental-base-app
     restart: unless-stopped
     depends_on:
       db:
@@ -28,12 +29,32 @@ services:
     volumes:
       - uploads:/app/uploads
 
+  # Отдельная копия для второго врача: та же программа, но своя база, свои файлы и свой адрес.
+  # Включается строкой COMPOSE_PROFILES=friend в .env (адрес — FRIEND_DOMAIN).
+  friend:
+    image: dental-base-app
+    pull_policy: never
+    profiles: ["friend"]
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://dental:${POSTGRES_PASSWORD}@db:5432/friend
+      TZ: Europe/Moscow
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      - uploads_friend:/app/uploads
+
   caddy:
     image: caddy:2
     restart: unless-stopped
     ports: ["80:80", "443:443"]
-    command: caddy reverse-proxy --from ${APP_DOMAIN} --to app:3000
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN}
+      FRIEND_DOMAIN: ${FRIEND_DOMAIN:-http://friend.localhost}
     volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy:/data
 
   # Ежедневная резервная копия базы в ./backups (хранится 14 дней)
@@ -48,14 +69,20 @@ services:
     volumes:
       - ./backups:/backups
       - uploads:/uploads:ro
+      - uploads_friend:/uploads-friend:ro
     entrypoint: >
       sh -c 'while true; do
-        pg_dump -h db -U dental dental | gzip > /backups/dental-$$(date +%F).sql.gz;
+        for d in dental friend; do
+          pg_dump -h db -U dental $$d > /tmp/$$d.sql 2>/dev/null && gzip -c /tmp/$$d.sql > /backups/$$d-$$(date +%F).sql.gz;
+          rm -f /tmp/$$d.sql;
+        done;
         find /backups -name "*.sql.gz" -mtime +14 -delete;
         mkdir -p /backups/uploads && cp -a -u /uploads/. /backups/uploads/;
+        if [ -n "$$(ls -A /uploads-friend)" ]; then mkdir -p /backups/uploads-friend && cp -a -u /uploads-friend/. /backups/uploads-friend/; fi;
         sleep 86400; done'
 
 volumes:
   pgdata:
   caddy:
   uploads:
+  uploads_friend:
