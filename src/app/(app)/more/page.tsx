@@ -8,7 +8,7 @@ import { getReminderTemplate } from "@/lib/reminder";
 import { getSettings } from "@/lib/settings";
 import { ConfirmButton } from "@/components/auto-submit";
 import { Field, PageHeader } from "@/components/ui";
-import { IconChart, IconChevron, IconLogout, IconSearch, IconTag, IconUsers } from "@/components/icons";
+import { IconChart, IconChevron, IconDisk, IconLogout, IconSearch, IconTag, IconUsers } from "@/components/icons";
 
 const ROLE: Record<string, string> = { OWNER: "Администратор", DOCTOR: "Врач", ASSISTANT: "Ассистент" };
 const PW: Record<string, [string, string]> = {
@@ -40,6 +40,7 @@ export default async function MorePage({ searchParams }: { searchParams: Promise
     { href: "/earnings", label: "Заработок", Icon: IconChart },
     { href: "/stats", label: "Статистика", Icon: IconChart },
     { href: "/patients?filter=archived", label: "Архив пациентов", Icon: IconUsers },
+    { href: "/storage", label: "Хранилище", Icon: IconDisk },
   ];
 
   return (

@@ -20,3 +20,4 @@ export const IconTag = ({ className }: P) => base(<><path d="M3 12V4.5A1.5 1.5 0
 export const IconChart = ({ className }: P) => base(<path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />, className);
 export const IconLogout = ({ className }: P) => base(<><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3" /><path d="M10 16l-4-4 4-4M6 12h10" /></>, className);
 export const IconCart = ({ className }: P) => base(<><path d="M3 4h2l2.5 11h11L21 7H6.5" /><circle cx="9" cy="19.5" r="1.3" /><circle cx="17" cy="19.5" r="1.3" /></>, className);
+export const IconDisk = ({ className }: P) => base(<><ellipse cx="12" cy="5.5" rx="8" ry="2.5" /><path d="M4 5.5v13c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5v-13" /><path d="M4 12c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5" /></>, className);
