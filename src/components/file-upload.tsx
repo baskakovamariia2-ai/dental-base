@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FILE_CATEGORY, PHOTO_TAGS } from "@/lib/labels";
+import { compressImage } from "@/lib/compress-image";
 
 export function FileUpload({ patientId }: { patientId: string }) {
   const router = useRouter();
@@ -17,17 +18,28 @@ export function FileUpload({ patientId }: { patientId: string }) {
   const upload = async () => {
     if (!files.length) return;
     setBusy(true);
-    setStatus("Загружаю…");
     try {
+      // Фото сжимаем в телефоне перед отправкой; рентген и документы — как есть
+      let toSend = files;
+      if (category === "PHOTO") {
+        setStatus("Сжимаю фото…");
+        toSend = [];
+        for (const f of files) toSend.push(await compressImage(f));
+      }
+      setStatus("Загружаю…");
       const fd = new FormData();
-      files.forEach((f) => fd.append("files", f));
+      toSend.forEach((f) => fd.append("files", f));
       fd.append("category", category);
       if (category === "PHOTO") fd.append("photoTag", tag);
       if (comment) fd.append("comment", comment);
       const res = await fetch(`/api/patients/${patientId}/files`, { method: "POST", body: fd });
       if (!res.ok) throw new Error();
       const data = (await res.json()) as { saved: number; skipped: number };
-      setStatus(`Загружено: ${data.saved}${data.skipped ? `, пропущено (больше 50 МБ): ${data.skipped}` : ""}`);
+      const mb = (n: number) => (n / 1024 / 1024).toLocaleString("ru-RU", { maximumFractionDigits: 1 });
+      const before = files.reduce((a, f) => a + f.size, 0);
+      const after = toSend.reduce((a, f) => a + f.size, 0);
+      const shrunk = category === "PHOTO" && after < before ? ` · сжато: ${mb(before)} МБ → ${mb(after)} МБ` : "";
+      setStatus(`Загружено: ${data.saved}${shrunk}${data.skipped ? `, пропущено (больше 50 МБ): ${data.skipped}` : ""}`);
       setFiles([]);
       setComment("");
       if (input.current) input.current.value = "";
