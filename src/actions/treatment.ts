@@ -6,7 +6,7 @@ import { requireUser } from "@/lib/auth";
 import { int, optInt, optStr, oneOf, str } from "@/lib/forms";
 import { TREATMENT_STATUS, values } from "@/lib/labels";
 import { isValidTooth } from "@/lib/teeth";
-import { applyCrownRules, applyEndoRules, fillMissingPrices, syncToothWithPlan } from "@/lib/plan";
+import { applyCrownRules, applyEndoRules, fillMissingPrices, recordDoneItems, syncToothWithPlan, unrecordDoneItem } from "@/lib/plan";
 
 function refresh(patientId: string) {
   revalidatePath(`/patients/${patientId}`);
@@ -39,6 +39,7 @@ export async function addTreatmentItem(patientId: string, formData: FormData) {
   await syncToothWithPlan(patientId, tooth);
   await fillMissingPrices({ patientIds: [patientId] });
   await applyCrownRules(patientId);
+  await recordDoneItems(patientId);
   refresh(patientId);
 }
 
@@ -61,6 +62,10 @@ export async function updateTreatmentItem(id: string, formData: FormData) {
     },
   });
   await syncToothWithPlan(item.patientId, item.toothNumber);
+  if (status === "DONE") await recordDoneItems(item.patientId);
+  else if (item.status === "DONE") await unrecordDoneItem(id);
+  revalidatePath("/earnings");
+  revalidatePath("/schedule");
   refresh(item.patientId);
 }
 

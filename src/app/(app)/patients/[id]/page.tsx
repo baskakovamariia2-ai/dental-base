@@ -5,7 +5,7 @@ import { requireUser } from "@/lib/auth";
 import { patientStats, buildToothInfo, ALL_TEETH } from "@/lib/teeth";
 import { OcclusalChart } from "@/components/occlusal-chart";
 import { getReminderTemplate, reminderText } from "@/lib/reminder";
-import { applyCrownRules, applyEndoRules, fillMissingPrices, moveItemNotesToTeeth } from "@/lib/plan";
+import { applyCrownRules, applyEndoRules, fillMissingPrices, moveItemNotesToTeeth, recordDoneItems } from "@/lib/plan";
 import { getSettings } from "@/lib/settings";
 import { buildStages } from "@/lib/stages";
 import { ReminderButton } from "@/components/reminder-button";
@@ -48,6 +48,7 @@ export default async function PatientPage({
   await applyEndoRules(id);
   await fillMissingPrices({ patientIds: [id] });
   await applyCrownRules(id);
+  await recordDoneItems(id);
 
   const patient = await prisma.patient.findUnique({
     where: { id },
@@ -81,6 +82,11 @@ export default async function PatientPage({
   const active = planItems.filter((i) => i.status !== "CANCELLED");
   const planTotal = active.reduce((s, i) => s + i.price, 0);
   const planPaid = planItems.reduce((s, i) => s + i.paid, 0);
+  // вылеченные зубы: завершённые пункты плана + зубы, отмеченные вылеченными вручную
+  const TREATED_STATUSES = ["TREATED", "FILLING", "CROWN", "IMPLANT"];
+  const doneByTooth = new Map<number, typeof planItems>();
+  for (const i of planItems) if (i.status === "DONE" && i.toothNumber !== null) doneByTooth.set(i.toothNumber, [...(doneByTooth.get(i.toothNumber) ?? []), i]);
+  const treatedTeeth = [...new Set([...doneByTooth.keys(), ...patient.teeth.filter((t) => TREATED_STATUSES.includes(t.status)).map((t) => t.number)])].sort((a, b) => a - b);
   const openItems = planItems.filter((i) => i.status === "PLANNED" || i.status === "IN_PROGRESS").length;
 
   // срезы КТ показываются на вкладке «КТ», а не среди фото
@@ -335,6 +341,29 @@ export default async function PatientPage({
       {tab === "history" && (
         <div className="space-y-3">
           <Link href={`/visits/new?patient=${patient.id}`} className="btn-accent w-full sm:w-auto"><IconPlus /> Добавить приём</Link>
+          {treatedTeeth.length > 0 && (
+            <div className="card card-pad">
+              <div className="section-title">Вылеченные зубы · {treatedTeeth.length}</div>
+              <div className="divide-y divide-zinc-100">
+                {treatedTeeth.map((n) => {
+                  const done = doneByTooth.get(n) ?? [];
+                  return (
+                    <div key={n} className="flex items-start gap-3 py-2">
+                      <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-lg bg-zinc-100 px-1.5 text-[13px] font-semibold tabular-nums">{n}</span>
+                      <div className="min-w-0 flex-1 text-[15px]">
+                        {done.length ? done.map((i) => (
+                          <div key={i.id} className="flex justify-between gap-2">
+                            <span>{i.treatment}<span className="ml-1 text-xs text-ink-mute">{fmtDate(i.updatedAt)}</span></span>
+                            <span className="tabular-nums">{money(i.price)}</span>
+                          </div>
+                        )) : <span className="text-ink-soft">Отмечен вылеченным</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           {patient.visits.length === 0 && <Empty>Приёмов пока не было</Empty>}
           {patient.visits.map((v) => (
             <article key={v.id} className="card card-pad">

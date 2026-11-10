@@ -53,5 +53,6 @@ export async function completeAppointment(id: string) {
     },
   });
   await prisma.appointment.update({ where: { id }, data: { status: "DONE", visitId: visit.id, treatmentItemId: itemId } });
+  if (itemId) await prisma.treatmentItem.update({ where: { id: itemId }, data: { visitId: visit.id } });
   await syncToothWithPlan(a.patientId, tooth);
 }

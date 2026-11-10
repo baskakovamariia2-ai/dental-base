@@ -163,3 +163,49 @@ export async function moveItemNotesToTeeth(patientId: string) {
     await prisma.treatmentItem.update({ where: { id: it.id }, data: { note: null, internalNote: null } });
   }
 }
+
+/**
+ * Завершённые пункты плана попадают в «Историю»: стоимость засчитывается полностью
+ * (оплачено = цена) и создаётся запись приёма — из неё считается заработок.
+ * Пункты, завершённые через запись в расписании, уже имеют приём и не дублируются.
+ */
+export async function recordDoneItems(patientId: string) {
+  const items = await prisma.treatmentItem.findMany({ where: { patientId, status: "DONE", visitId: null } });
+  if (!items.length) return;
+  const viaAppointments = await prisma.appointment.findMany({
+    where: { patientId, treatmentItemId: { in: items.map((i) => i.id) }, visitId: { not: null } },
+    select: { treatmentItemId: true, visitId: true },
+  });
+  const linked = new Map(viaAppointments.map((a) => [a.treatmentItemId as string, a.visitId as string]));
+  const doctor =
+    (await prisma.user.findFirst({ where: { isActive: true, role: "DOCTOR" }, orderBy: { createdAt: "asc" } })) ??
+    null;
+  for (const it of items) {
+    const existing = linked.get(it.id);
+    if (existing) {
+      await prisma.treatmentItem.update({ where: { id: it.id }, data: { visitId: existing, paid: Math.max(it.paid, it.price) } });
+      continue;
+    }
+    const visit = await prisma.visit.create({
+      data: {
+        patientId,
+        doctorId: doctor?.id ?? null,
+        date: it.updatedAt,
+        reason: it.treatment,
+        workDone: it.treatment,
+        teeth: it.toothNumber !== null ? String(it.toothNumber) : null,
+        cost: it.price,
+      },
+    });
+    await prisma.treatmentItem.update({ where: { id: it.id }, data: { visitId: visit.id, paid: Math.max(it.paid, it.price) } });
+  }
+}
+
+/** Пункт вернули из «Завершено» — убираем созданную им запись из истории (если это не приём из расписания) */
+export async function unrecordDoneItem(itemId: string) {
+  const it = await prisma.treatmentItem.findUnique({ where: { id: itemId } });
+  if (!it?.visitId || it.status === "DONE") return;
+  const fromAppointment = await prisma.appointment.findFirst({ where: { visitId: it.visitId } });
+  if (!fromAppointment) await prisma.visit.deleteMany({ where: { id: it.visitId } });
+  await prisma.treatmentItem.update({ where: { id: it.id }, data: { visitId: null } });
+}

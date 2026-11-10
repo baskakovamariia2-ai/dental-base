@@ -11,6 +11,15 @@ import { OcclusalChart } from "@/components/occlusal-chart";
 import { PrintButton } from "@/components/print-button";
 
 export const dynamic = "force-dynamic";
+
+// название файла PDF = ФИО пациента и дата выставления плана
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  await requireUser();
+  const { id } = await params;
+  const p = await prisma.patient.findUnique({ where: { id }, select: { lastName: true, firstName: true, middleName: true } });
+  const name = p ? [p.lastName, p.firstName, p.middleName].filter(Boolean).join(" ") : "План лечения";
+  return { title: { absolute: `${name} ${fmtDate(new Date())}` } };
+}
 export const revalidate = 0;
 
 export default async function PrintPlanPage({ params }: { params: Promise<{ id: string }> }) {
@@ -37,6 +46,11 @@ export default async function PrintPlanPage({ params }: { params: Promise<{ id: 
     return ptNote.get(n)!;
   };
   const cat = (n: number) => infoOf(n).category;
+  // уже сделано — без стоимости
+  const doneMap = new Map<number, string[]>();
+  for (const i of patient.treatmentItems) if (i.status === "DONE" && i.toothNumber !== null) doneMap.set(i.toothNumber, [...(doneMap.get(i.toothNumber) ?? []), i.treatment]);
+  for (const t of patient.teeth) if (["TREATED", "FILLING", "CROWN", "IMPLANT"].includes(t.status) && !doneMap.has(t.number)) doneMap.set(t.number, []);
+  const doneTeeth = [...doneMap.keys()].sort((a, b) => a - b);
 
   const Row = ({ list }: { list: number[] }) => (
     <div className="grid grid-cols-[repeat(16,minmax(0,1fr))] gap-[3px]">
@@ -75,6 +89,24 @@ export default async function PrintPlanPage({ params }: { params: Promise<{ id: 
           </div>
           <div className="mt-4"><CategoryLegend small present={new Set([...UPPER, ...LOWER].map(cat))} /></div>
         </section>
+
+        {doneTeeth.length > 0 && (
+          <section className="mb-7 break-inside-avoid">
+            <h2 className="mb-2 text-[16px] font-semibold">Уже сделано</h2>
+            <table className="w-full border-collapse text-[14px]">
+              <tbody>
+                {doneTeeth.map((n) => (
+                  <tr key={n} className="border-b border-zinc-100">
+                    <td className="w-14 py-2 align-top">
+                      <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-lg bg-zinc-100 px-1.5 text-[13px] font-semibold tabular-nums text-zinc-700">{n}</span>
+                    </td>
+                    <td className="py-2">{doneMap.get(n)!.length ? [...new Set(doneMap.get(n))].join(", ") : "Зуб вылечен"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        )}
 
         {items.length === 0 ? (
           <p className="text-zinc-500">Предстоящего лечения нет.</p>
