@@ -3,6 +3,8 @@ services:
   db:
     image: postgres:16
     restart: unless-stopped
+    # экономный режим для сервера с 1 ГБ памяти
+    command: postgres -c shared_buffers=64MB -c max_connections=40 -c work_mem=2MB
     environment:
       POSTGRES_USER: dental
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -26,6 +28,7 @@ services:
       DATABASE_URL: postgresql://dental:${POSTGRES_PASSWORD}@db:5432/dental
       TZ: Europe/Moscow
       UPLOAD_DIR: /app/uploads
+      NODE_OPTIONS: --max-old-space-size=256
     volumes:
       - uploads:/app/uploads
 
@@ -43,6 +46,7 @@ services:
       DATABASE_URL: postgresql://dental:${POSTGRES_PASSWORD}@db:5432/friend
       TZ: Europe/Moscow
       UPLOAD_DIR: /app/uploads
+      NODE_OPTIONS: --max-old-space-size=256
     volumes:
       - uploads_friend:/app/uploads
 

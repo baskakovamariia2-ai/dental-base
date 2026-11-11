@@ -90,24 +90,6 @@ export default async function PrintPlanPage({ params }: { params: Promise<{ id: 
           <div className="mt-4"><CategoryLegend small present={new Set([...UPPER, ...LOWER].map(cat))} /></div>
         </section>
 
-        {doneTeeth.length > 0 && (
-          <section className="mb-7 break-inside-avoid">
-            <h2 className="mb-2 text-[16px] font-semibold">Уже сделано</h2>
-            <table className="w-full border-collapse text-[14px]">
-              <tbody>
-                {doneTeeth.map((n) => (
-                  <tr key={n} className="border-b border-zinc-100">
-                    <td className="w-14 py-2 align-top">
-                      <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-lg bg-zinc-100 px-1.5 text-[13px] font-semibold tabular-nums text-zinc-700">{n}</span>
-                    </td>
-                    <td className="py-2">{doneMap.get(n)!.length ? [...new Set(doneMap.get(n))].join(", ") : "Зуб вылечен"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
-        )}
-
         {items.length === 0 ? (
           <p className="text-zinc-500">Предстоящего лечения нет.</p>
         ) : (
@@ -157,6 +139,23 @@ export default async function PrintPlanPage({ params }: { params: Promise<{ id: 
           </section>
         )}
 
+        {doneTeeth.length > 0 && (
+          <section className="mt-8 break-inside-avoid">
+            <h2 className="mb-2 text-[16px] font-semibold">Уже сделано</h2>
+            <table className="w-full border-collapse text-[14px]">
+              <tbody>
+                {doneTeeth.map((n) => (
+                  <tr key={n} className="border-b border-zinc-100">
+                    <td className="w-14 py-2 align-top">
+                      <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-lg bg-zinc-100 px-1.5 text-[13px] font-semibold tabular-nums text-zinc-700">{n}</span>
+                    </td>
+                    <td className="py-2">{doneMap.get(n)!.length ? [...new Set(doneMap.get(n))].join(", ") : "Зуб вылечен"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        )}
         <p className="mt-10 text-[11px] text-zinc-400">План является предварительным и может уточняться в ходе лечения.</p>
       </main>
       <PrintButton />
