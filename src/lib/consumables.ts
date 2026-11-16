@@ -142,7 +142,9 @@ export function isLowItem(i: StockLike) {
   if (i.category === "INSTRUMENTS") return false;
   if (!i.countable) return i.level === "LOW" || i.level === "OUT";
   if (i.trackPerVisit) return i.quantity <= i.minQuantity;
-  if (i.openLevel) return i.quantity <= i.minQuantity && (i.openLevel === "LOW" || i.openLevel === "OUT");
+  // открытая упаковка почти кончилась, а запасных больше нет (остаток считаем вместе с открытой:
+  // «вазелин 1 шт., мало» — пора заказывать)
+  if (i.openLevel === "LOW" || i.openLevel === "OUT") return i.quantity <= i.minQuantity + 1;
   return i.quantity <= i.minQuantity;
 }
 
