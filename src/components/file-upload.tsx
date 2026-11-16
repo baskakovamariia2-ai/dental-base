@@ -2,14 +2,14 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FILE_CATEGORY, PHOTO_TAGS } from "@/lib/labels";
+import { FILE_CATEGORY } from "@/lib/labels";
 import { compressImage } from "@/lib/compress-image";
+import { PhotoUploader } from "./photo-uploader";
 
 export function FileUpload({ patientId }: { patientId: string }) {
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
   const [category, setCategory] = useState("PHOTO");
-  const [tag, setTag] = useState(PHOTO_TAGS[0]);
   const [comment, setComment] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [status, setStatus] = useState<string | null>(null);
@@ -30,7 +30,6 @@ export function FileUpload({ patientId }: { patientId: string }) {
       const fd = new FormData();
       toSend.forEach((f) => fd.append("files", f));
       fd.append("category", category);
-      if (category === "PHOTO") fd.append("photoTag", tag);
       if (comment) fd.append("comment", comment);
       const res = await fetch(`/api/patients/${patientId}/files`, { method: "POST", body: fd });
       if (!res.ok) throw new Error();
@@ -61,15 +60,10 @@ export function FileUpload({ patientId }: { patientId: string }) {
           </button>
         ))}
       </div>
-      {category === "PHOTO" && (
-        <div className="-mx-1 flex flex-wrap gap-1.5">
-          {PHOTO_TAGS.map((t) => (
-            <button key={t} type="button" onClick={() => setTag(t)} className={`rounded-full px-3 py-1.5 text-sm ${tag === t ? "bg-accent-soft font-medium text-accent-ink" : "bg-zinc-100 text-ink-soft"}`}>
-              {t}
-            </button>
-          ))}
-        </div>
-      )}
+      {category === "PHOTO" ? (
+        <PhotoUploader patientId={patientId} />
+      ) : (
+      <>
       <input
         ref={input}
         type="file"
@@ -83,6 +77,8 @@ export function FileUpload({ patientId }: { patientId: string }) {
         {busy ? "Загружаю…" : files.length ? `Загрузить (${files.length})` : "Выберите файлы"}
       </button>
       {status && <p className="text-sm text-ink-soft">{status}</p>}
+      </>
+      )}
     </div>
   );
 }

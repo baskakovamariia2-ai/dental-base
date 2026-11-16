@@ -180,6 +180,13 @@ export async function recordDoneItems(patientId: string) {
   const doctor =
     (await prisma.user.findFirst({ where: { isActive: true, role: "DOCTOR" }, orderBy: { createdAt: "asc" } })) ??
     null;
+  // дата — последний приём этого пациента (не отменённый, уже наступивший): деньги попадают в тот день, когда он был на приёме.
+  // Если приёмов не было — сегодня, но в заработок такой день не попадёт (смотри earnings.ts).
+  const lastAp = await prisma.appointment.findFirst({
+    where: { patientId, startsAt: { lte: new Date() }, status: { notIn: ["CANCELLED", "NO_SHOW"] } },
+    orderBy: { startsAt: "desc" },
+    select: { startsAt: true },
+  });
   for (const it of items) {
     const existing = linked.get(it.id);
     if (existing) {
@@ -190,7 +197,8 @@ export async function recordDoneItems(patientId: string) {
       data: {
         patientId,
         doctorId: doctor?.id ?? null,
-        date: it.updatedAt,
+        date: lastAp?.startsAt ?? new Date(),
+        source: "plan",
         reason: it.treatment,
         workDone: it.treatment,
         teeth: it.toothNumber !== null ? String(it.toothNumber) : null,
@@ -208,4 +216,31 @@ export async function unrecordDoneItem(itemId: string) {
   const fromAppointment = await prisma.appointment.findFirst({ where: { visitId: it.visitId } });
   if (!fromAppointment) await prisma.visit.deleteMany({ where: { id: it.visitId } });
   await prisma.treatmentItem.update({ where: { id: it.id }, data: { visitId: null } });
+}
+
+/**
+ * Одноразовое исправление: записи истории, созданные из «Завершено» в плане до этой версии,
+ * получали дату последнего изменения пункта (например, 10 ноября) — и попадали в заработок за день без приёма.
+ * Помечаем их и переносим на последний приём пациента.
+ */
+export async function fixPlanVisitsOnce() {
+  const KEY = "migr:planVisits1";
+  if (await prisma.setting.findUnique({ where: { key: KEY } })) return;
+  const items = await prisma.treatmentItem.findMany({ where: { visitId: { not: null } }, select: { visitId: true, patientId: true } });
+  const ids = [...new Set(items.map((i) => i.visitId as string))];
+  const fromAps = new Set(
+    (await prisma.appointment.findMany({ where: { visitId: { in: ids } }, select: { visitId: true } })).map((a) => a.visitId as string),
+  );
+  for (const id of ids) {
+    if (fromAps.has(id)) continue;
+    const v = await prisma.visit.findUnique({ where: { id } });
+    if (!v || v.source) continue;
+    const lastAp = await prisma.appointment.findFirst({
+      where: { patientId: v.patientId, startsAt: { lte: v.createdAt }, status: { notIn: ["CANCELLED", "NO_SHOW"] } },
+      orderBy: { startsAt: "desc" },
+      select: { startsAt: true },
+    });
+    await prisma.visit.update({ where: { id }, data: { source: "plan", ...(lastAp ? { date: lastAp.startsAt } : {}) } });
+  }
+  await prisma.setting.create({ data: { key: KEY, value: new Date().toISOString() } });
 }

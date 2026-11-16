@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { MAX_FILE_BYTES, saveFile } from "@/lib/storage";
+import { isValidTooth } from "@/lib/teeth";
+import { photoCaption } from "@/lib/photos";
 
 const CATEGORIES = ["CT", "XRAY", "PHOTO", "DOCUMENT", "OTHER"] as const;
 
@@ -19,6 +21,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const photoTag = String(fd.get("photoTag") ?? "").slice(0, 100) || null;
   const comment = String(fd.get("comment") ?? "").slice(0, 1000) || null;
   const title = String(fd.get("title") ?? "").slice(0, 200);
+  const toothRaw = Number(fd.get("toothNumber"));
+  const toothNumber = isValidTooth(toothRaw) ? toothRaw : null;
+  const stageRaw = String(fd.get("stage") ?? "");
+  const stage = ["BEFORE", "DURING", "AFTER"].includes(stageRaw) ? stageRaw : null;
+  const jawRaw = String(fd.get("jaw") ?? "");
+  const jaw = !toothNumber && ["UPPER", "LOWER"].includes(jawRaw) ? jawRaw : null;
+  const apRaw = String(fd.get("appointmentId") ?? "");
+  const appointmentId = apRaw ? (await prisma.appointment.findFirst({ where: { id: apRaw, patientId: id }, select: { id: true } }))?.id ?? null : null;
+  const tag = toothNumber || jaw || stage ? photoCaption({ toothNumber, stage, jaw, photoTag: null }) : photoTag;
 
   let saved = 0;
   for (const file of files.slice(0, 30)) {
@@ -28,7 +39,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       data: {
         patientId: id,
         category,
-        photoTag,
+        photoTag: tag,
+        toothNumber,
+        stage,
+        jaw,
+        appointmentId,
         comment,
         title: title || file.name || "Файл",
         fileName: file.name?.slice(0, 200) || null,

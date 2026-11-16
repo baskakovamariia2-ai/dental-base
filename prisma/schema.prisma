@@ -147,6 +147,7 @@ model Visit {
   recommendations String?
   cost            Int      @default(0)
   comment         String?
+  source          String? // "plan" — создан автоматически при «Завершено» в плане
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -285,6 +286,10 @@ model PatientFile {
   date        DateTime     @default(now())
   comment     String?
   photoTag    String? // до / после / зуб N / другое
+  toothNumber Int? // фото конкретного зуба
+  stage       String? // BEFORE | DURING | AFTER
+  jaw         String? // UPPER | LOWER — фото всех зубов сверху / снизу
+  appointmentId String? // из отчёта о смене
   storageKey  String       @default("") // путь к файлу в хранилище (пусто, если это ссылка)
   url         String? // ссылка (например, на сообщение в Telegram с КТ)
   fileName    String?

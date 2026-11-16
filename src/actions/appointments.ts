@@ -102,3 +102,9 @@ export async function completeDay(date: string) {
   for (const a of aps) await completeAppointment(a.id);
   revalidatePath("/", "layout");
 }
+
+/** Завершить смену из отчёта: всё как «Завершить день», затем к расписанию этого дня */
+export async function finishShift(date: string) {
+  await completeDay(date);
+  redirect(`/schedule?view=day&date=${date}`);
+}

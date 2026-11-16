@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/auth";
 import { patientStats, buildToothInfo, ALL_TEETH } from "@/lib/teeth";
 import { OcclusalChart } from "@/components/occlusal-chart";
 import { getReminderTemplate, reminderText } from "@/lib/reminder";
+import { PHOTO_JAWS, PHOTO_STAGES, photoCaption } from "@/lib/photos";
 import { applyCrownRules, applyEndoRules, fillMissingPrices, moveItemNotesToTeeth, recordDoneItems } from "@/lib/plan";
 import { getSettings } from "@/lib/settings";
 import { buildStages } from "@/lib/stages";
@@ -93,6 +94,8 @@ export default async function PatientPage({
   const photos = patient.files.filter((f) => f.storageKey && f.category !== "CT" && (f.mimeType?.startsWith("image/") ?? false));
   const docs = patient.files.filter((f) => f.storageKey && f.category !== "CT" && !(f.mimeType?.startsWith("image/") ?? false));
   const links = patient.files.filter((f) => !f.storageKey && f.url);
+  const photoTeeth = [...new Set(photos.map((f) => f.toothNumber).filter((n): n is number => n !== null))].sort((a: number, b: number) => a - b);
+  const otherPhotos = photos.filter((f) => f.toothNumber === null && !f.jaw);
 
   return (
     <div>
@@ -217,6 +220,7 @@ export default async function PatientPage({
               prices={priceOptions}
               teeth={patient.teeth.map((t) => ({ number: t.number, status: t.status, notes: t.notes, patientNote: t.patientNote, patientNoteVisible: t.patientNoteVisible }))}
               plan={planItems.map((i) => ({ id: i.id, toothNumber: i.toothNumber, treatment: i.treatment, price: i.price, status: i.status, note: i.note, internalNote: i.internalNote }))}
+              photos={photos.filter((f) => f.toothNumber !== null).map((f) => ({ id: f.id, toothNumber: f.toothNumber, stage: f.stage }))}
             />
           </div>
           <div>
@@ -419,29 +423,37 @@ export default async function PatientPage({
           </section>
 
           <section>
-            <h2 className="section-title">Фото · {photos.length}</h2>
-            {photos.length === 0 ? (
-              <Empty>Фото пока нет</Empty>
+            <h2 className="section-title">Все зубы · сверху и снизу</h2>
+            <div className="card divide-y divide-zinc-100">
+              {PHOTO_JAWS.map((j) => (
+                <PhotoRow key={j.value} title={j.label} patientId={patient.id} photos={photos.filter((f) => f.jaw === j.value)} />
+              ))}
+            </div>
+          </section>
+
+          <section>
+            <h2 className="section-title">По зубам · {photoTeeth.length}</h2>
+            {photoTeeth.length === 0 ? (
+              <Empty>Фото зубов пока нет. Загрузите выше или в карточке зуба на вкладке «Лечение».</Empty>
             ) : (
-              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                {photos.map((f) => (
-                  <div key={f.id} className="group relative overflow-hidden rounded-xl bg-zinc-100">
-                    <a href={`/api/files/${f.id}`} target="_blank" rel="noopener noreferrer">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={`/api/files/${f.id}`} alt={f.title} loading="lazy" className="aspect-square w-full object-cover" />
-                    </a>
-                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-2 pb-1.5 pt-4 text-[10px] leading-tight text-white">
-                      {f.photoTag && <div className="font-semibold">{f.photoTag}</div>}
-                      <div>{fmtDate(f.date)}{f.comment ? ` · ${f.comment}` : ""}</div>
-                    </div>
-                    <form action={deletePatientFile.bind(null, f.id)} className="absolute right-1 top-1">
-                      <ConfirmButton message="Удалить фото?" className="flex h-7 w-7 items-center justify-center rounded-full bg-black/40 text-xs text-white">✕</ConfirmButton>
-                    </form>
-                  </div>
+              <div className="card divide-y divide-zinc-100">
+                {photoTeeth.map((n) => (
+                  <PhotoRow key={n} title={`Зуб ${n}`} patientId={patient.id} photos={photos.filter((f) => f.toothNumber === n)} />
                 ))}
               </div>
             )}
           </section>
+
+          {otherPhotos.length > 0 && (
+            <section>
+              <h2 className="section-title">Другие фото · {otherPhotos.length}</h2>
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                {otherPhotos.map((f) => (
+                  <Thumb key={f.id} patientId={patient.id} f={f} />
+                ))}
+              </div>
+            </section>
+          )}
 
           <section>
             <h2 className="section-title">Документы и файлы · {docs.length}</h2>
@@ -523,6 +535,52 @@ function VisitLine({ label, value }: { label: string; value: string }) {
     <div>
       <dt className="text-xs text-ink-mute">{label}</dt>
       <dd className="whitespace-pre-wrap">{value}</dd>
+    </div>
+  );
+}
+
+type PhotoFile = { id: string; title: string; date: Date; comment: string | null; photoTag: string | null; toothNumber: number | null; stage: string | null; jaw: string | null };
+
+function Thumb({ patientId, f, size = "grid" }: { patientId: string; f: PhotoFile; size?: "grid" | "strip" }) {
+  return (
+    <Link
+      href={`/patients/${patientId}/photo/${f.id}`}
+      className={`relative block shrink-0 overflow-hidden rounded-xl bg-zinc-100 ${size === "strip" ? "h-20 w-20" : ""}`}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={`/api/files/${f.id}`} alt={f.title} loading="lazy" className={size === "strip" ? "h-20 w-20 object-cover" : "aspect-square w-full object-cover"} />
+      {size === "grid" && (
+        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-2 pb-1.5 pt-4 text-[10px] leading-tight text-white">
+          {photoCaption(f) && <div className="font-semibold">{photoCaption(f)}</div>}
+          <div>{fmtDate(f.date)}</div>
+        </div>
+      )}
+    </Link>
+  );
+}
+
+/** Строка «Зуб 36» / «Все зубы сверху»: до / в процессе / после */
+function PhotoRow({ title, patientId, photos }: { title: string; patientId: string; photos: PhotoFile[] }) {
+  const groups = [...PHOTO_STAGES.map((s) => ({ label: s.label, items: photos.filter((f) => f.stage === s.value) })), { label: "Без этапа", items: photos.filter((f) => !f.stage) }];
+  return (
+    <div className="px-4 py-3">
+      <div className="mb-2 text-[15px] font-semibold">{title}</div>
+      {photos.length === 0 ? (
+        <div className="text-sm text-ink-mute">Фото пока нет</div>
+      ) : (
+        <div className="space-y-2">
+          {groups.filter((g) => g.items.length).map((g) => (
+            <div key={g.label}>
+              <div className="mb-1 text-xs font-medium uppercase tracking-wide text-ink-mute">{g.label} · {g.items.length}</div>
+              <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+                {g.items.map((f) => (
+                  <Thumb key={f.id} patientId={patientId} f={f} size="strip" />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

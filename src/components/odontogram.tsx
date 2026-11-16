@@ -1,5 +1,9 @@
 "use client";
 
+import Link from "next/link";
+import { PhotoUploader } from "./photo-uploader";
+import { stageLabel } from "@/lib/photos";
+
 import { useState } from "react";
 import type { ToothStatus, TreatmentStatus } from "@prisma/client";
 import { saveTooth } from "@/actions/teeth";
@@ -16,7 +20,9 @@ export type PriceOption = { name: string; price: number };
 
 const OPEN = (s: TreatmentStatus) => s === "PLANNED" || s === "IN_PROGRESS";
 
-export function Odontogram({ patientId, teeth, plan, prices }: { patientId: string; teeth: ToothData[]; plan: PlanItemData[]; prices: PriceOption[] }) {
+export type ToothPhoto = { id: string; toothNumber: number | null; stage: string | null };
+
+export function Odontogram({ patientId, teeth, plan, prices, photos = [] }: { patientId: string; teeth: ToothData[]; plan: PlanItemData[]; prices: PriceOption[]; photos?: ToothPhoto[] }) {
   const [open, setOpen] = useState<number | null>(null);
   const map = new Map(teeth.map((t) => [t.number, t]));
   const get = (n: number): ToothData => map.get(n) ?? { number: n, status: "HEALTHY", notes: null, patientNote: null, patientNoteVisible: true };
@@ -49,7 +55,7 @@ export function Odontogram({ patientId, teeth, plan, prices }: { patientId: stri
         <div className="pt-2"><CategoryLegend present={new Set([...UPPER, ...LOWER].map(cat))} /></div>
       </div>
       {current && (
-        <ToothSheet key={current.number} patientId={patientId} tooth={current} category={cat(current.number)} plan={planFor(current.number)} prices={prices} onClose={() => setOpen(null)} />
+        <ToothSheet key={current.number} patientId={patientId} tooth={current} category={cat(current.number)} plan={planFor(current.number)} prices={prices} photos={photos.filter((f) => f.toothNumber === current.number)} onClose={() => setOpen(null)} />
       )}
     </div>
   );
@@ -64,8 +70,8 @@ const CHOICES: { cat: ToothCategory; status: ToothStatus }[] = [
 const CHOICE_LABEL: Partial<Record<ToothCategory, string>> = { healthy: "Здоровый", caries: "Кариес", treated: "Вылеченный", missing: "Отсутствует" };
 
 function ToothSheet({
-  patientId, tooth, category, plan, prices, onClose,
-}: { patientId: string; tooth: ToothData; category: ToothCategory; plan: PlanItemData[]; prices: PriceOption[]; onClose: () => void }) {
+  patientId, tooth, category, plan, prices, photos, onClose,
+}: { patientId: string; tooth: ToothData; category: ToothCategory; plan: PlanItemData[]; prices: PriceOption[]; photos: ToothPhoto[]; onClose: () => void }) {
   const [busy, setBusy] = useState(false);
   const [formKey, setFormKey] = useState(0);
   const [endoOpen, setEndoOpen] = useState(false);
@@ -240,6 +246,23 @@ function ToothSheet({
           <button disabled={busy} className="btn-secondary w-full">Сохранить заметку</button>
           <p className="text-xs text-ink-mute">Состояние сохраняется сразу. «Пульпит / периодонтит» и «Под удаление» сразу добавляют лечение в план. Если есть лечение в плане, зуб и так отмечен как проблемный.</p>
         </form>
+
+        <div className="space-y-2 border-t border-zinc-100 pt-4">
+          <div className="label">📷 Фото зуба {photos.length ? `· ${photos.length}` : ""}</div>
+          {photos.length > 0 && (
+            <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+              {photos.map((f) => (
+                <Link key={f.id} href={`/patients/${patientId}/photo/${f.id}`} className="relative block h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-zinc-100">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={`/api/files/${f.id}`} alt="" loading="lazy" className="h-20 w-20 object-cover" />
+                  {stageLabel(f.stage) && <span className="absolute inset-x-0 bottom-0 bg-black/50 py-0.5 text-center text-[10px] text-white">{stageLabel(f.stage)}</span>}
+                </Link>
+              ))}
+            </div>
+          )}
+          <PhotoUploader patientId={patientId} fixedTooth={tooth.number} compact />
+          <p className="text-xs text-ink-mute">Фото сразу появятся во вкладке «Файлы» в строке этого зуба.</p>
+        </div>
       </div>
     </div>
   );

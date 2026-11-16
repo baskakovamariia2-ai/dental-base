@@ -2,8 +2,6 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { getReminderTemplate } from "@/lib/reminder";
-import { completeDay } from "@/actions/appointments";
-import { ConfirmButton } from "@/components/auto-submit";
 import { earningsByDay } from "@/lib/earnings";
 import { money } from "@/lib/format";
 import { addDays, addMonths, parseISODate, sameDay, startOfDay, startOfMonth, startOfWeek, toISODate } from "@/lib/dates";
@@ -195,13 +193,8 @@ function Compact({ a }: { a: AppointmentWith }) {
 function CompleteDayButton({ date, count }: { date: string; count: number }) {
   if (!count) return null;
   return (
-    <form action={completeDay.bind(null, date)} className="mt-2">
-      <ConfirmButton
-        message={`Завершить день? ${count} зап. отметятся выполненными, процедуры попадут в план как выполненные и оплаченные, суммы — в заработок.`}
-        className="btn-primary w-full"
-      >
-        ✓ Завершить день ({count})
-      </ConfirmButton>
-    </form>
+    <Link href={`/schedule/report?date=${date}`} className="btn-primary mt-2 w-full">
+      📝 Отчёт и завершить смену ({count})
+    </Link>
   );
 }

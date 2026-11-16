@@ -1,6 +1,7 @@
 import { prisma } from "./db";
 import { addDays, startOfDay, toISODate } from "./dates";
 import { getSettings } from "./settings";
+import { fixPlanVisitsOnce } from "./plan";
 
 export type DayRow = {
   date: string;
@@ -19,11 +20,12 @@ export type DayRow = {
  * Рабочий день — день, когда были приёмы или записи (кроме отменённых): за него платим аренду и стерилизацию.
  */
 export async function earningsByDay(from: Date, to: Date): Promise<DayRow[]> {
+  await fixPlanVisitsOnce();
   const [visits, aps, overrides, settings] = await Promise.all([
-    prisma.visit.findMany({ where: { date: { gte: from, lt: to } }, select: { date: true, cost: true } }),
+    prisma.visit.findMany({ where: { date: { gte: from, lt: to } }, select: { date: true, cost: true, source: true, patientId: true } }),
     prisma.appointment.findMany({
-      where: { startsAt: { gte: from, lt: to }, status: { notIn: ["CANCELLED"] } },
-      select: { startsAt: true },
+      where: { startsAt: { gte: from, lt: to }, status: { notIn: ["CANCELLED", "NO_SHOW"] } },
+      select: { startsAt: true, patientId: true },
     }),
     prisma.dayExpense.findMany({ where: { date: { gte: toISODate(from), lt: toISODate(to) } } }),
     getSettings(),
@@ -40,7 +42,10 @@ export async function earningsByDay(from: Date, to: Date): Promise<DayRow[]> {
     }
     return row;
   };
+  // лечение, отмеченное «Завершено» в плане, считается только в день, когда пациент был на приёме
+  const apDays = new Set(aps.map((a) => `${a.patientId}|${toISODate(a.startsAt)}`));
   for (const v of visits) {
+    if (v.source === "plan" && !apDays.has(`${v.patientId}|${toISODate(v.date)}`)) continue;
     const r = get(toISODate(v.date));
     r.visits++;
     r.revenue += v.cost;
