@@ -1,16 +1,36 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { compressImage } from "@/lib/compress-image";
 import { photoTakenAt } from "@/lib/exif-date";
 import { PHOTO_STAGES } from "@/lib/photos";
 
 export type ShiftAp = { id: string; patientId: string; name: string; start: string; end: string; toothNumber: number | null };
-type Photo = { key: string; file: File; url: string; time: Date | null; ap: string }; // ap: id записи, "" — не распознано, "skip" — не загружать
+type Photo = { key: string; file: File; url: string; thumb: string; time: Date | null; ap: string; skip: boolean }; // ap: id записи или "" — не распознано
 
 const hhmm = (d: Date) => d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
 const hhmmss = (d: Date) => d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
+/** Маленькая копия для превью — чтобы 200 фото с фотоаппарата не перегружали телефон */
+async function makeThumb(file: File): Promise<string> {
+  try {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    const k = 360 / Math.max(img.naturalWidth, img.naturalHeight);
+    const c = document.createElement("canvas");
+    c.width = Math.max(1, Math.round(img.naturalWidth * Math.min(1, k)));
+    c.height = Math.max(1, Math.round(img.naturalHeight * Math.min(1, k)));
+    c.getContext("2d")!.drawImage(img, 0, 0, c.width, c.height);
+    URL.revokeObjectURL(url);
+    const blob: Blob | null = await new Promise((r) => c.toBlob(r, "image/jpeg", 0.7));
+    return blob ? URL.createObjectURL(blob) : "";
+  } catch {
+    return "";
+  }
+}
 
 /** К какой записи относится фото: по времени съёмки */
 function guess(time: Date | null, aps: ShiftAp[]): string {
@@ -41,28 +61,40 @@ export function ShiftPhotos({ aps }: { aps: ShiftAp[] }) {
   const [tooth, setTooth] = useState<Record<string, string>>(() => Object.fromEntries(aps.map((a) => [a.id, a.toothNumber ? String(a.toothNumber) : ""])));
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [review, setReview] = useState<number | null>(null); // крупный просмотр: индекс фото
 
   const pick = async (list: FileList | null) => {
     if (!list?.length) return;
-    setStatus("Читаю время съёмки…");
+    const files = Array.from(list).filter((f) => f.type.startsWith("image/") || /\.(heic|heif|jpe?g|png)$/i.test(f.name));
     const added: Photo[] = [];
-    for (const f of Array.from(list)) {
-      if (!f.type.startsWith("image/") && !/\.(heic|heif|jpe?g|png)$/i.test(f.name)) continue;
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      setStatus(`Готовлю превью ${i + 1} из ${files.length}…`);
       const time = await photoTakenAt(f);
-      added.push({ key: `${f.name}-${f.size}-${Math.random()}`, file: f, url: URL.createObjectURL(f), time, ap: guess(time, aps) });
+      const thumb = await makeThumb(f);
+      added.push({ key: `${f.name}-${f.size}-${Math.random()}`, file: f, url: "", thumb, time, ap: guess(time, aps), skip: false });
     }
     added.sort((a, b) => (a.time?.getTime() ?? 0) - (b.time?.getTime() ?? 0));
-    setPhotos((p) => [...p, ...added]);
+    setPhotos((p) => [...p, ...added].sort((a, b) => (a.time?.getTime() ?? 0) - (b.time?.getTime() ?? 0)));
     const unknown = added.filter((p) => !p.ap).length;
-    setStatus(unknown ? `Добавлено ${added.length}. Не удалось определить пациента для ${unknown} — выберите вручную внизу.` : `Добавлено ${added.length} фото — проверьте, кто есть кто.`);
+    setStatus(
+      `Добавлено ${added.length}. Нажмите «Просмотреть крупно», чтобы убрать неудачные.` + (unknown ? ` Для ${unknown} фото пациент не определён — выберите вручную.` : ""),
+    );
   };
 
-  const move = (key: string, ap: string) => setPhotos((p) => p.map((x) => (x.key === key ? { ...x, ap } : x)));
+  const move = (key: string, ap: string) =>
+    setPhotos((p) => p.map((x) => (x.key === key ? (ap === "skip" ? { ...x, skip: true } : { ...x, ap, skip: false }) : x)));
+  const toggleSkip = (key: string) => setPhotos((p) => p.map((x) => (x.key === key ? { ...x, skip: !x.skip } : x)));
+  const setSkipAt = (i: number, skip: boolean) => {
+    setPhotos((p) => p.map((x, j) => (j === i ? { ...x, skip } : x)));
+    setReview(i + 1 < photos.length ? i + 1 : null);
+  };
   const groups = useMemo(
     () => [...aps.map((a) => ({ ap: a as ShiftAp | null, id: a.id, items: photos.filter((p) => p.ap === a.id) })), { ap: null, id: "", items: photos.filter((p) => p.ap === "") }],
     [aps, photos],
   );
-  const toSend = photos.filter((p) => p.ap && p.ap !== "skip");
+  const toSend = photos.filter((p) => p.ap && !p.skip);
+  const skipped = photos.filter((p) => p.skip).length;
 
   const upload = async () => {
     setBusy(true);
@@ -99,7 +131,12 @@ export function ShiftPhotos({ aps }: { aps: ShiftAp[] }) {
         📥 Выбрать фото смены (сколько угодно)
         <input type="file" multiple accept="image/*" className="hidden" onChange={(e) => { pick(e.target.files); e.target.value = ""; }} />
       </label>
-      <p className="text-xs text-ink-mute">База читает время съёмки каждого фото и раскладывает по пациентам по расписанию. Если время не прочиталось или фото не туда — поменяйте пациента под фото.</p>
+      <p className="text-xs text-ink-mute">С карты памяти: в окне выбора нажмите «Выбрать файлы» → папка с картой → «Выбрать» → отметьте все фото. База читает время съёмки и раскладывает фото по пациентам по расписанию.</p>
+      {photos.length > 0 && (
+        <button type="button" onClick={() => setReview(0)} className="btn-primary w-full">
+          👀 Просмотреть крупно и убрать неудачные ({photos.length})
+        </button>
+      )}
 
       {photos.length > 0 &&
         groups
@@ -143,11 +180,17 @@ export function ShiftPhotos({ aps }: { aps: ShiftAp[] }) {
               ) : (
                 <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
                   {g.items.map((p) => (
-                    <div key={p.key} className="w-24 shrink-0">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={p.url} alt="" className="h-24 w-24 rounded-xl object-cover" />
-                      <div className="mt-0.5 text-center text-[10px] tabular-nums text-ink-mute">{p.time ? hhmmss(p.time) : "время ?"}</div>
-                      <select value={p.ap} onChange={(e) => move(p.key, e.target.value)} className="mt-0.5 w-full rounded-lg border border-zinc-200 bg-white px-1 py-1 text-[11px]">
+                    <div key={p.key} className="w-28 shrink-0">
+                      <button type="button" onClick={() => setReview(photos.indexOf(p))} className="relative block">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={p.thumb} alt="" className={`h-28 w-28 rounded-xl object-cover ${p.skip ? "opacity-30 grayscale" : ""}`} />
+                        {p.skip && <span className="absolute inset-0 flex items-center justify-center text-3xl text-rose-600">✕</span>}
+                      </button>
+                      <div className="mt-0.5 flex items-center justify-between text-[10px] tabular-nums text-ink-mute">
+                        <span>{p.time ? hhmmss(p.time) : "время ?"}</span>
+                        <button type="button" onClick={() => toggleSkip(p.key)} className={p.skip ? "text-accent-ink" : "text-rose-600"}>{p.skip ? "вернуть" : "убрать"}</button>
+                      </div>
+                      <select value={p.skip ? "skip" : p.ap} onChange={(e) => move(p.key, e.target.value)} className="mt-0.5 w-full rounded-lg border border-zinc-200 bg-white px-1 py-1 text-[11px]">
                         <option value="">— кто? —</option>
                         {aps.map((a) => (
                           <option key={a.id} value={a.id}>{hhmm(new Date(a.start))} {a.name}</option>
@@ -161,9 +204,7 @@ export function ShiftPhotos({ aps }: { aps: ShiftAp[] }) {
             </div>
           ))}
 
-      {photos.some((p) => p.ap === "skip") && (
-        <p className="text-xs text-ink-mute">Не загружать: {photos.filter((p) => p.ap === "skip").length} фото</p>
-      )}
+      {skipped > 0 && <p className="text-xs text-ink-mute">Убрано (не загрузятся): {skipped} фото</p>}
 
       {toSend.length > 0 && (
         <button type="button" disabled={busy} onClick={upload} className="btn-primary w-full py-3">
@@ -171,6 +212,62 @@ export function ShiftPhotos({ aps }: { aps: ShiftAp[] }) {
         </button>
       )}
       {status && <p className="text-sm text-ink-soft">{status}</p>}
+
+      {review !== null && photos[review] && (
+        <Review
+          photo={photos[review]}
+          index={review}
+          total={photos.length}
+          aps={aps}
+          onKeep={() => setSkipAt(review, false)}
+          onSkip={() => setSkipAt(review, true)}
+          onPrev={() => setReview(Math.max(0, review - 1))}
+          onMove={(ap) => move(photos[review].key, ap)}
+          onClose={() => setReview(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Крупный просмотр: по одному фото, большие кнопки «Убрать» / «Оставить» */
+function Review({
+  photo, index, total, aps, onKeep, onSkip, onPrev, onMove, onClose,
+}: {
+  photo: Photo; index: number; total: number; aps: ShiftAp[];
+  onKeep: () => void; onSkip: () => void; onPrev: () => void; onMove: (ap: string) => void; onClose: () => void;
+}) {
+  const [full, setFull] = useState<string>("");
+  useEffect(() => {
+    // полноразмерное фото — только одно за раз, старое сразу освобождаем
+    const u = URL.createObjectURL(photo.file);
+    setFull(u);
+    return () => URL.revokeObjectURL(u);
+  }, [photo.file]);
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-black text-white" style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" }}>
+      <div className="flex items-center gap-2 px-3 py-2">
+        <button type="button" onClick={onClose} className="rounded-xl bg-white/15 px-3 py-2 text-sm">← Готово</button>
+        <div className="min-w-0 flex-1 text-right text-sm">
+          <div className="tabular-nums">{index + 1} / {total}{photo.time ? ` · ${hhmmss(photo.time)}` : ""}</div>
+          <select value={photo.ap} onChange={(e) => onMove(e.target.value)} className="mt-1 max-w-full rounded-lg bg-white/15 px-2 py-1 text-xs text-white">
+            <option value="">— кто? —</option>
+            {aps.map((a) => (
+              <option key={a.id} value={a.id}>{hhmm(new Date(a.start))} {a.name}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <div className="relative flex min-h-0 flex-1 items-center justify-center">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={full || photo.thumb} alt="" className={`max-h-full max-w-full object-contain ${photo.skip ? "opacity-40" : ""}`} />
+        {photo.skip && <span className="absolute rounded-full bg-rose-600 px-3 py-1 text-sm">убрано</span>}
+      </div>
+      <div className="grid grid-cols-[auto_1fr_1fr] gap-2 p-3">
+        <button type="button" onClick={onPrev} disabled={index === 0} className="rounded-2xl bg-white/15 px-4 py-4 text-lg disabled:opacity-30">‹</button>
+        <button type="button" onClick={onSkip} className="rounded-2xl bg-rose-600 py-4 text-[17px] font-semibold">✕ Убрать</button>
+        <button type="button" onClick={onKeep} className="rounded-2xl bg-emerald-600 py-4 text-[17px] font-semibold">✓ Оставить</button>
+      </div>
     </div>
   );
 }
