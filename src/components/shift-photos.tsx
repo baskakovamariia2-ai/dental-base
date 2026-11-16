@@ -4,10 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { compressImage } from "@/lib/compress-image";
 import { photoTakenAt } from "@/lib/exif-date";
-import { PHOTO_STAGES } from "@/lib/photos";
+import { PHOTO_STAGES, stageLabel } from "@/lib/photos";
+
+const targetLabel = (t: string | undefined) => (!t ? "" : t === "UPPER" ? "все сверху" : t === "LOWER" ? "все снизу" : `зуб ${t}`);
+const validTarget = (t: string | undefined) => !!t && (t === "UPPER" || t === "LOWER" || /^[1-4][1-8]$/.test(t));
 
 export type ShiftAp = { id: string; patientId: string; name: string; start: string; end: string; toothNumber: number | null };
-type Photo = { key: string; file: File; url: string; thumb: string; time: Date | null; ap: string; skip: boolean }; // ap: id записи или "" — не распознано
+type Photo = { key: string; file: File; url: string; thumb: string; time: Date | null; ap: string; skip: boolean; pStage?: string; pTarget?: string };
+// pStage / pTarget — подпись именно этого фото (если не задана — берётся общая для пациента). Target: номер зуба, "UPPER", "LOWER" или "" (без зуба) // ap: id записи или "" — не распознано
 
 const hhmm = (d: Date) => d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
 const hhmmss = (d: Date) => d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
@@ -84,6 +88,10 @@ export function ShiftPhotos({ aps }: { aps: ShiftAp[] }) {
 
   const move = (key: string, ap: string) =>
     setPhotos((p) => p.map((x) => (x.key === key ? (ap === "skip" ? { ...x, skip: true } : { ...x, ap, skip: false }) : x)));
+  const effStage = (p: Photo) => p.pStage ?? stage[p.ap] ?? "";
+  const effTarget = (p: Photo) => p.pTarget ?? tooth[p.ap] ?? "";
+  const label = (p: Photo) => [validTarget(effTarget(p)) ? targetLabel(effTarget(p)) : "", stageLabel(effStage(p)) ?? ""].filter(Boolean).join(" · ");
+  const setPhoto = (key: string, patch: Partial<Photo>) => setPhotos((list) => list.map((x) => (x.key === key ? { ...x, ...patch } : x)));
   const toggleSkip = (key: string) => setPhotos((p) => p.map((x) => (x.key === key ? { ...x, skip: !x.skip } : x)));
   const setSkipAt = (i: number, skip: boolean) => {
     setPhotos((p) => p.map((x, j) => (j === i ? { ...x, skip } : x)));
@@ -109,8 +117,11 @@ export function ShiftPhotos({ aps }: { aps: ShiftAp[] }) {
         fd.append("files", f);
         fd.append("category", "PHOTO");
         fd.append("appointmentId", a.id);
-        if (stage[a.id]) fd.append("stage", stage[a.id]);
-        if (/^[1-4][1-8]$/.test(tooth[a.id] ?? "")) fd.append("toothNumber", tooth[a.id]);
+        const st = effStage(p);
+        const tg = effTarget(p);
+        if (st) fd.append("stage", st);
+        if (/^[1-4][1-8]$/.test(tg)) fd.append("toothNumber", tg);
+        else if (tg === "UPPER" || tg === "LOWER") fd.append("jaw", tg);
         if (p.time) fd.append("takenAt", p.time.toISOString());
         const res = await fetch(`/api/patients/${a.patientId}/files`, { method: "POST", body: fd });
         if (!res.ok) throw new Error();
@@ -165,14 +176,7 @@ export function ShiftPhotos({ aps }: { aps: ShiftAp[] }) {
                       {s.label}
                     </button>
                   ))}
-                  <input
-                    value={tooth[g.id] ?? ""}
-                    onChange={(e) => setTooth((t) => ({ ...t, [g.id]: e.target.value.replace(/\D/g, "").slice(0, 2) }))}
-                    inputMode="numeric"
-                    placeholder="зуб"
-                    className="input w-16 px-2 py-1 text-xs"
-                    aria-label="Номер зуба"
-                  />
+                  <TargetPicker value={tooth[g.id] ?? ""} onChange={(v) => setTooth((t) => ({ ...t, [g.id]: v }))} light />
                 </div>
               )}
               {g.items.length === 0 ? (
@@ -186,6 +190,7 @@ export function ShiftPhotos({ aps }: { aps: ShiftAp[] }) {
                         <img src={p.thumb} alt="" className={`h-28 w-28 rounded-xl object-cover ${p.skip ? "opacity-30 grayscale" : ""}`} />
                         {p.skip && <span className="absolute inset-0 flex items-center justify-center text-3xl text-rose-600">✕</span>}
                       </button>
+                      {label(p) && <div className="mt-0.5 truncate text-center text-[10px] font-medium text-accent-ink">{label(p)}</div>}
                       <div className="mt-0.5 flex items-center justify-between text-[10px] tabular-nums text-ink-mute">
                         <span>{p.time ? hhmmss(p.time) : "время ?"}</span>
                         <button type="button" onClick={() => toggleSkip(p.key)} className={p.skip ? "text-accent-ink" : "text-rose-600"}>{p.skip ? "вернуть" : "убрать"}</button>
@@ -223,6 +228,10 @@ export function ShiftPhotos({ aps }: { aps: ShiftAp[] }) {
           onSkip={() => setSkipAt(review, true)}
           onPrev={() => setReview(Math.max(0, review - 1))}
           onMove={(ap) => move(photos[review].key, ap)}
+          stage={effStage(photos[review])}
+          target={effTarget(photos[review])}
+          onStage={(v) => setPhoto(photos[review].key, { pStage: v })}
+          onTarget={(v) => setPhoto(photos[review].key, { pTarget: v })}
           onClose={() => setReview(null)}
         />
       )}
@@ -232,10 +241,11 @@ export function ShiftPhotos({ aps }: { aps: ShiftAp[] }) {
 
 /** Крупный просмотр: по одному фото, большие кнопки «Убрать» / «Оставить» */
 function Review({
-  photo, index, total, aps, onKeep, onSkip, onPrev, onMove, onClose,
+  photo, index, total, aps, onKeep, onSkip, onPrev, onMove, onClose, stage, target, onStage, onTarget,
 }: {
   photo: Photo; index: number; total: number; aps: ShiftAp[];
   onKeep: () => void; onSkip: () => void; onPrev: () => void; onMove: (ap: string) => void; onClose: () => void;
+  stage: string; target: string; onStage: (v: string) => void; onTarget: (v: string) => void;
 }) {
   const [full, setFull] = useState<string>("");
   useEffect(() => {
@@ -263,11 +273,46 @@ function Review({
         <img src={full || photo.thumb} alt="" className={`max-h-full max-w-full object-contain ${photo.skip ? "opacity-40" : ""}`} />
         {photo.skip && <span className="absolute rounded-full bg-rose-600 px-3 py-1 text-sm">убрано</span>}
       </div>
+      <div className="space-y-2 px-3 pt-2">
+        <div className="flex flex-wrap justify-center gap-1.5">
+          {PHOTO_STAGES.map((st) => (
+            <button key={st.value} type="button" onClick={() => onStage(stage === st.value ? "" : st.value)} className={`rounded-full px-3 py-1.5 text-sm ${stage === st.value ? "bg-white font-medium text-black" : "bg-white/15"}`}>
+              {st.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex justify-center">
+          <TargetPicker value={target} onChange={onTarget} />
+        </div>
+      </div>
       <div className="grid grid-cols-[auto_1fr_1fr] gap-2 p-3">
         <button type="button" onClick={onPrev} disabled={index === 0} className="rounded-2xl bg-white/15 px-4 py-4 text-lg disabled:opacity-30">‹</button>
         <button type="button" onClick={onSkip} className="rounded-2xl bg-rose-600 py-4 text-[17px] font-semibold">✕ Убрать</button>
         <button type="button" onClick={onKeep} className="rounded-2xl bg-emerald-600 py-4 text-[17px] font-semibold">✓ Оставить</button>
       </div>
+    </div>
+  );
+}
+
+/** Что на фото: зуб (номер), все зубы сверху, все зубы снизу */
+function TargetPicker({ value, onChange, light = false }: { value: string; onChange: (v: string) => void; light?: boolean }) {
+  const isTooth = value !== "UPPER" && value !== "LOWER";
+  const chip = (on: boolean) =>
+    light
+      ? `rounded-full px-2.5 py-1 text-xs ${on ? "bg-accent-soft font-medium text-accent-ink" : "bg-white text-ink-soft"}`
+      : `rounded-full px-3 py-1.5 text-sm ${on ? "bg-white font-medium text-black" : "bg-white/15"}`;
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <input
+        value={isTooth ? value : ""}
+        onChange={(e) => onChange(e.target.value.replace(/\D/g, "").slice(0, 2))}
+        inputMode="numeric"
+        placeholder="зуб №"
+        className={light ? "input w-16 px-2 py-1 text-xs" : "w-20 rounded-full bg-white/15 px-3 py-1.5 text-center text-sm text-white placeholder:text-white/60"}
+        aria-label="Номер зуба"
+      />
+      <button type="button" onClick={() => onChange(value === "UPPER" ? "" : "UPPER")} className={chip(value === "UPPER")}>Все сверху</button>
+      <button type="button" onClick={() => onChange(value === "LOWER" ? "" : "LOWER")} className={chip(value === "LOWER")}>Все снизу</button>
     </div>
   );
 }
