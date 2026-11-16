@@ -130,6 +130,12 @@ type SeedItem = {
   minQuantity: number;
 };
 
+/** Цена из описи — запасная, если строка не связана со складом */
+function seedPrice(key: string): number | null {
+  const r = (clinicInventory as SeedItem[]).find((x) => x.key === key);
+  return r?.price ?? null;
+}
+
 async function seedProcedures(keyToId: Map<string, string>) {
   for (const [i, p] of PROCEDURE_SEED.entries()) {
     await prisma.procedure.create({
@@ -143,7 +149,7 @@ async function seedProcedures(keyToId: Map<string, string>) {
             itemId: keyToId.get(l.key) ?? null,
             qty: l.qty,
             perUnit: l.perUnit,
-            price: l.price ?? null,
+            price: l.price ?? seedPrice(l.key),
             sortOrder: j + 1,
           })),
         },
@@ -152,36 +158,54 @@ async function seedProcedures(keyToId: Map<string, string>) {
   }
 }
 
-/** Загрузить опись клиники из таблицы (13–16.11.2026): текущий склад уходит в архив, процедуры создаются заново */
+/** Добавить из описи клиники (13–16.11.2026) позиции, которых ещё нет. Существующие не трогаем — правки пользователя сохраняются */
 export async function loadClinicInventory() {
   await requireUser();
   const rows = clinicInventory as SeedItem[];
-  await prisma.inventoryItem.updateMany({ where: { archivedAt: null }, data: { archivedAt: new Date(), toBuyQuantity: null } });
+  const existing = await prisma.inventoryItem.findMany({ where: { archivedAt: null } });
+  const norm = (n: string) => n.trim().toLowerCase();
+  const byName = new Map(existing.map((i) => [norm(i.name), i.id]));
   const keyToId = new Map<string, string>();
   for (const r of rows) {
-    const created = await prisma.inventoryItem.create({
-      data: {
-        name: r.name.slice(0, 200),
-        category: r.category as never,
-        quantity: r.quantity,
-        unit: r.unit,
-        countable: r.countable,
-        level: (r.level as never) ?? null,
-        openLevel: (r.openLevel as never) ?? null,
-        currentPrice: r.price,
-        lastPurchasePrice: r.price,
-        url: r.url,
-        comment: r.comment,
-        trackPerVisit: r.trackPerVisit,
-        minQuantity: r.minQuantity,
-      },
-    });
-    if (r.key) keyToId.set(r.key, created.id);
+    let id = byName.get(norm(r.name.slice(0, 200)));
+    if (!id) {
+      const created = await prisma.inventoryItem.create({
+        data: {
+          name: r.name.slice(0, 200),
+          category: r.category as never,
+          quantity: r.quantity,
+          unit: r.unit,
+          countable: r.countable,
+          level: (r.level as never) ?? null,
+          openLevel: (r.openLevel as never) ?? null,
+          currentPrice: r.price,
+          lastPurchasePrice: r.price,
+          url: r.url,
+          comment: r.comment,
+          trackPerVisit: r.trackPerVisit,
+          minQuantity: r.minQuantity,
+        },
+      });
+      id = created.id;
+    }
+    if (r.key) keyToId.set(r.key, id);
   }
-  await prisma.procedure.deleteMany({});
-  await seedProcedures(keyToId);
+  if ((await prisma.procedure.count()) === 0) await seedProcedures(keyToId);
+  else await relinkProcedureLines(keyToId);
   refresh();
   redirect("/inventory");
+}
+
+/** Строкам процедур, потерявшим связь со складом, вернуть связь по названию из описи */
+async function relinkProcedureLines(keyToId: Map<string, string>) {
+  const lines = await prisma.procedureItem.findMany({ where: { itemId: null } });
+  const nameToKey = new Map<string, string>();
+  for (const p of PROCEDURE_SEED) for (const l of p.lines) nameToKey.set(l.name, l.key);
+  for (const line of lines) {
+    const key = nameToKey.get(line.name);
+    const id = key ? keyToId.get(key) : undefined;
+    if (id) await prisma.procedureItem.update({ where: { id: line.id }, data: { itemId: id } });
+  }
 }
 
 /** Создать стандартные процедуры, если их ещё нет (позиции ищутся на складе по названию) */

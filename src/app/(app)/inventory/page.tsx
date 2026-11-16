@@ -17,6 +17,14 @@ import { IconPlus, IconSearch } from "@/components/icons";
 
 type Item = InventoryItem & { supplier: Supplier | null };
 
+// Порядок разделов во вкладке «Расходники»
+const PACKAGE_GROUPS: { label: string; cats: string[] }[] = [
+  { label: "Расходники", cats: ["CONSUMABLES", "PROTECTION"] },
+  { label: "Анестезия", cats: ["ANESTHESIA"] },
+  { label: "Материалы", cats: ["MATERIALS", "COMPOSITES"] },
+  { label: "Другое", cats: ["OTHER"] },
+];
+
 export default async function InventoryPage({
   searchParams,
 }: {
@@ -141,17 +149,23 @@ export default async function InventoryPage({
             </section>
           )}
 
-          <section>
-            <h2 className="section-title">Считаем упаковками</h2>
-            {packaged.length === 0 ? (
-              <Empty>Пока пусто. Внизу страницы можно загрузить опись клиники.</Empty>
-            ) : (
-              <div className="card divide-y divide-zinc-100">
-                {packaged.map((i) => <PackageRow key={i.id} item={i} />)}
-              </div>
-            )}
-            <p className="mt-2 px-1 text-xs text-ink-mute">После приёма это не списывается. Начали новую упаковку — «Открыла новую», и одна целая уйдёт. У открытой отмечайте: много, есть, мало.</p>
-          </section>
+          <p className="mb-3 px-1 text-xs text-ink-mute">Ниже — то, что считаем упаковками. После приёма это не списывается. Начали новую упаковку — «Открыла новую», и одна целая уйдёт. У открытой отмечайте: много, есть, мало.</p>
+          {packaged.length === 0 ? (
+            <Empty>Пока пусто. Внизу страницы можно загрузить опись клиники.</Empty>
+          ) : (
+            PACKAGE_GROUPS.map((g) => {
+              const items = packaged.filter((i) => g.cats.includes(i.category));
+              if (items.length === 0) return null;
+              return (
+                <section key={g.label} className="mb-5">
+                  <h2 className="section-title">{g.label} · {items.length}</h2>
+                  <div className="card divide-y divide-zinc-100">
+                    {items.map((i) => <PackageRow key={i.id} item={i} />)}
+                  </div>
+                </section>
+              );
+            })
+          )}
         </>
       )}
 
@@ -247,8 +261,8 @@ export default async function InventoryPage({
 
       <div className="mt-6 space-y-3 border-t border-zinc-200 pt-6">
         <form action={loadClinicInventory}>
-          <ConfirmButton className="btn-secondary" message="Загрузить опись клиники Ильи из таблицы (ноябрь 2026)? Текущий склад уйдёт в архив, процедуры для себестоимости создадутся заново.">
-            📋 Загрузить опись клиники из таблицы
+          <ConfirmButton className="btn-secondary" message="Добавить из описи (ноябрь 2026) позиции, которых нет на складе? То, что уже есть, не изменится: количество, минимальный остаток и цены останутся вашими.">
+            📋 Добавить недостающее из описи
           </ConfirmButton>
         </form>
         <div className="flex flex-wrap gap-2">
