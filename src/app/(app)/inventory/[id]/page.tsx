@@ -24,6 +24,18 @@ export default async function ItemPage({ params }: { params: Promise<{ id: strin
     <div className="space-y-4">
       <PageHeader title={item.name} subtitle={findOpt(INVENTORY_CATEGORY_ALL, item.category).label} back={inventoryRowHref(item)} action={<Link href={`/inventory/${id}/edit`} className="btn-secondary">Изменить</Link>} />
 
+      <div className="card card-pad space-y-3">
+        {item.comment && <p className="text-sm text-ink-soft">{item.comment}</p>}
+        <div className="grid gap-2 sm:grid-cols-2">
+          {item.url ? (
+            <a href={item.url} target="_blank" rel="noopener noreferrer" className="btn-accent w-full justify-center">Открыть товар на сайте ↗</a>
+          ) : (
+            <Link href={`/inventory/${id}/edit`} className="btn-secondary w-full justify-center">+ Добавить ссылку на товар</Link>
+          )}
+          <a href={`https://yandex.ru/images/search?text=${encodeURIComponent(`${item.name} стоматология`)}`} target="_blank" rel="noopener noreferrer" className="btn-secondary w-full justify-center">Как выглядит — картинки ↗</a>
+        </div>
+      </div>
+
       {!item.countable && (
         <div className="card card-pad">
           <div className="mb-2 text-sm text-ink-soft">Сколько осталось</div>
@@ -80,8 +92,6 @@ export default async function ItemPage({ params }: { params: Promise<{ id: strin
         <Row label="Текущая цена">{money(item.currentPrice)}</Row>
         <Row label="Последняя закупка">{money(item.lastPurchasePrice)} · {fmtDate(item.lastPurchaseDate)}</Row>
         <Row label="Поставщик">{item.supplier?.name ?? "—"}</Row>
-        {item.url && <Row label="Ссылка"><a href={item.url} target="_blank" rel="noopener noreferrer" className="text-accent">Открыть</a></Row>}
-        {item.comment && <Row label="Комментарий">{item.comment}</Row>}
       </div>
 
       <div className="card card-pad">
