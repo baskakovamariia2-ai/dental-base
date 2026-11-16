@@ -96,7 +96,7 @@ export default async function InventoryPage({
               <div className="space-y-2">
                 {low.map((i) => (
                   <div key={i.id} className="flex items-center gap-2 text-sm text-amber-900">
-                    <Link href={`/inventory/${i.id}`} className="min-w-0 flex-1 truncate">{i.name}</Link>
+                    <Link href={`/inventory/${i.id}`} className="min-w-0 flex-1 break-words">{i.name}</Link>
                     {i.toBuyQuantity ? (
                       <span className="shrink-0 text-xs text-accent">в закупке</span>
                     ) : (
@@ -128,7 +128,7 @@ export default async function InventoryPage({
                   return (
                     <div key={i.id} id={`item-${i.id}`} className="flex scroll-mt-24 items-center gap-3 px-4 py-3">
                       <Link href={`/inventory/${i.id}`} className="min-w-0 flex-1">
-                        <div className="truncate text-[15px] font-medium">{i.name}</div>
+                        <div className="break-words text-[15px] font-medium leading-snug">{i.name}</div>
                         <div className="truncate text-xs text-ink-mute">
                           {money(i.currentPrice ?? i.lastPurchasePrice)}{left !== null ? ` · хватит примерно на ${left} приёмов` : ""}
                         </div>
@@ -165,8 +165,8 @@ export default async function InventoryPage({
               {tools.map((i) => (
                 <div key={i.id} id={`item-${i.id}`} className="flex scroll-mt-24 items-center gap-3 px-4 py-3">
                   <Link href={`/inventory/${i.id}`} className="min-w-0 flex-1">
-                    <div className="truncate text-[15px] font-medium">{i.name}</div>
-                    {i.comment && <div className="truncate text-xs text-ink-mute">{i.comment}</div>}
+                    <div className="break-words text-[15px] font-medium leading-snug">{i.name}</div>
+                    {i.comment && <div className="break-words text-xs text-ink-mute">{i.comment}</div>}
                   </Link>
                   {i.countable ? <QtyStepper item={i} warn={false} /> : <span className="text-sm text-ink-mute">{findOpt(STOCK_LEVEL, i.level ?? "ENOUGH").label}</span>}
                 </div>
@@ -290,7 +290,7 @@ function PackageRow({ item: i }: { item: Item }) {
       <div id={`item-${i.id}`} className="scroll-mt-24 space-y-2 px-4 py-3">
         <Link href={`/inventory/${i.id}`} className="flex items-center gap-2">
           {low && <span className="h-2 w-2 shrink-0 rounded-full bg-amber-400" />}
-          <span className="truncate text-[15px] font-medium">{i.name}</span>
+          <span className="break-words text-[15px] font-medium leading-snug">{i.name}</span>
         </Link>
         <div className="flex gap-1.5">
           {STOCK_LEVEL.map((l) => (
@@ -309,7 +309,7 @@ function PackageRow({ item: i }: { item: Item }) {
         <Link href={`/inventory/${i.id}`} className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             {low && <span className="h-2 w-2 shrink-0 rounded-full bg-amber-400" />}
-            <span className="truncate text-[15px] font-medium">{i.name}</span>
+            <span className="break-words text-[15px] font-medium leading-snug">{i.name}</span>
           </div>
           <div className="truncate text-xs text-ink-mute">
             {findOpt(INVENTORY_CATEGORY_ALL, i.category).label}

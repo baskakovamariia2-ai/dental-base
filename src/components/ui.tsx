@@ -20,7 +20,7 @@ export function PageHeader({
         </Link>
       )}
       <div className="min-w-0 flex-1">
-        <h1 className="truncate text-[26px] font-semibold leading-tight tracking-tight">{title}</h1>
+        <h1 className="break-words text-[26px] font-semibold leading-tight tracking-tight">{title}</h1>
         {subtitle && <div className="mt-0.5 text-sm text-ink-soft">{subtitle}</div>}
       </div>
       {action}
