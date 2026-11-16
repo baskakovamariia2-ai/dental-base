@@ -5,7 +5,8 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { num, optInt, optStr, safeReturn, str } from "@/lib/forms";
-import { isTracked, lineCost, loadProcedures } from "@/lib/consumables";
+import { applyVisitConsumables, isTracked, lineCost, loadProcedures, unconfirmedVisitsOn } from "@/lib/consumables";
+import { parseISODate } from "@/lib/dates";
 import { PROCEDURE_SEED } from "@/lib/procedure-seed";
 import clinicInventory from "@/data/clinic-inventory.json";
 import { resetExportKeyValue } from "@/lib/export-key";
@@ -18,38 +19,30 @@ function refresh() {
 export async function confirmConsumables(visitId: string, formData: FormData) {
   await requireUser();
   const back = safeReturn(formData, `/visits/${visitId}`);
-  const procedureId = optStr(formData, "procedureId", 50);
-  const procs = await loadProcedures();
-  const proc = procs.find((p) => p.id === procedureId) ?? null;
-  const tracked = await prisma.inventoryItem.findMany({ where: { trackPerVisit: true, archivedAt: null } });
-
-  await prisma.$transaction(async (tx) => {
-    // вернуть на склад то, что списали при прошлом подтверждении
-    const prev = await tx.visitConsumable.findMany({ where: { visitId } });
-    for (const c of prev) {
-      if (c.itemId) await tx.inventoryItem.update({ where: { id: c.itemId }, data: { quantity: { increment: c.qty } } });
-    }
-    await tx.visitConsumable.deleteMany({ where: { visitId } });
-
-    let total = 0;
-    for (const it of tracked) {
-      const qty = Math.max(0, Math.min(20, num(formData, `q_${it.id}`, 0)));
-      if (!qty) continue;
-      const price = it.currentPrice ?? it.lastPurchasePrice ?? 0;
-      const cost = Math.round(qty * price);
-      total += cost;
-      await tx.visitConsumable.create({ data: { visitId, itemId: it.id, name: it.name, qty, cost } });
-      const fresh = await tx.inventoryItem.findUniqueOrThrow({ where: { id: it.id } });
-      await tx.inventoryItem.update({ where: { id: it.id }, data: { quantity: Math.max(0, fresh.quantity - qty) } });
-    }
-    if (proc) for (const l of proc.items) if (!isTracked(l)) total += lineCost(l);
-    await tx.visit.update({
-      where: { id: visitId },
-      data: { procedureId: proc?.id ?? null, consumablesCost: Math.round(total), consumablesConfirmed: true },
-    });
-  });
+  const tracked = await prisma.inventoryItem.findMany({ where: { trackPerVisit: true, archivedAt: null }, select: { id: true } });
+  const qty: Record<string, number> = {};
+  for (const it of tracked) qty[it.id] = num(formData, `q_${it.id}`, 0);
+  await applyVisitConsumables(visitId, qty, optStr(formData, "procedureId", 50));
   refresh();
   redirect(back);
+}
+
+/** Конец дня: подтвердить анестезию и оптрагейты сразу по всем приёмам дня */
+export async function confirmDayConsumables(date: string, formData: FormData) {
+  await requireUser();
+  const day = parseISODate(date);
+  if (!day) redirect("/schedule");
+  const visits = await unconfirmedVisitsOn(day!);
+  const ids = new Set(String(formData.get("visitIds") ?? "").split(",").filter(Boolean));
+  const tracked = await prisma.inventoryItem.findMany({ where: { trackPerVisit: true, archivedAt: null }, select: { id: true } });
+  for (const v of visits) {
+    if (!ids.has(v.id)) continue;
+    const qty: Record<string, number> = {};
+    for (const it of tracked) qty[it.id] = num(formData, `q_${v.id}_${it.id}`, 0);
+    await applyVisitConsumables(v.id, qty, optStr(formData, `p_${v.id}`, 50) ?? v.procedureId);
+  }
+  refresh();
+  redirect(`/schedule?view=day&date=${date}`);
 }
 
 // ───────────── Процедуры ─────────────

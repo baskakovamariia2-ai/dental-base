@@ -152,3 +152,55 @@ export function isLowItem(i: StockLike) {
 export function inventoryRowHref(item: { id: string; category: string }) {
   return `/inventory${item.category === "INSTRUMENTS" ? "?tab=tools" : ""}#item-${item.id}`;
 }
+
+/**
+ * Подтвердить расходники приёма: вернуть на склад прошлое списание, списать новое,
+ * посчитать себестоимость (подтверждённые позиции + остальное по процедуре).
+ * qty — сколько использовали: { [id позиции склада]: количество }.
+ */
+export async function applyVisitConsumables(visitId: string, qty: Record<string, number>, procedureId: string | null) {
+  const procs = await loadProcedures();
+  const proc = procs.find((p) => p.id === procedureId) ?? null;
+  const tracked = await prisma.inventoryItem.findMany({ where: { trackPerVisit: true, archivedAt: null } });
+  await prisma.$transaction(async (tx) => {
+    const prev = await tx.visitConsumable.findMany({ where: { visitId } });
+    for (const c of prev) {
+      if (c.itemId) await tx.inventoryItem.update({ where: { id: c.itemId }, data: { quantity: { increment: c.qty } } });
+    }
+    await tx.visitConsumable.deleteMany({ where: { visitId } });
+    let total = 0;
+    for (const it of tracked) {
+      const n = Math.max(0, Math.min(20, Number(qty[it.id]) || 0));
+      if (!n) continue;
+      const price = it.currentPrice ?? it.lastPurchasePrice ?? 0;
+      const cost = Math.round(n * price);
+      total += cost;
+      await tx.visitConsumable.create({ data: { visitId, itemId: it.id, name: it.name, qty: n, cost } });
+      const fresh = await tx.inventoryItem.findUniqueOrThrow({ where: { id: it.id } });
+      await tx.inventoryItem.update({ where: { id: it.id }, data: { quantity: Math.max(0, fresh.quantity - n) } });
+    }
+    if (proc) for (const l of proc.items) if (!isTracked(l)) total += lineCost(l);
+    await tx.visit.update({
+      where: { id: visitId },
+      data: { procedureId: proc?.id ?? null, consumablesCost: Math.round(total), consumablesConfirmed: true },
+    });
+  });
+}
+
+/** Сколько обычно уходит на процедуру: { [id позиции склада]: количество } */
+export function defaultTrackedQty(proc: ProcedureFull | null): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (proc) for (const l of proc.items) if (l.itemId && isTracked(l)) out[l.itemId] = (out[l.itemId] ?? 0) + l.qty;
+  return out;
+}
+
+/** Приёмы дня, у которых расходники ещё не подтверждены */
+export async function unconfirmedVisitsOn(day: Date) {
+  const next = new Date(day);
+  next.setDate(next.getDate() + 1);
+  return prisma.visit.findMany({
+    where: { date: { gte: day, lt: next }, consumablesConfirmed: false },
+    include: { patient: true },
+    orderBy: { date: "asc" },
+  });
+}

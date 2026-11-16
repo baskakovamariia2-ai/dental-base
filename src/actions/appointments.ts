@@ -7,6 +7,7 @@ import { requireUser } from "@/lib/auth";
 import { int, oneOf, optInt, optStr, safeReturn, str } from "@/lib/forms";
 import { addDays, parseISODate, parseInputDateTime, toISODate } from "@/lib/dates";
 import { completeAppointment, resyncCompletedAppointment } from "@/lib/appointments";
+import { unconfirmedVisitsOn } from "@/lib/consumables";
 import { trackedItems } from "@/lib/consumables";
 import { isValidTooth } from "@/lib/teeth";
 import { APPOINTMENT_STATUS, values } from "@/lib/labels";
@@ -153,5 +154,9 @@ export async function completeDay(date: string) {
 /** Завершить смену из отчёта: всё как «Завершить день», затем к расписанию этого дня */
 export async function finishShift(date: string) {
   await completeDay(date);
+  // сразу спросить, сколько ушло анестезий и оптрагейтов на каждого пациента
+  const day = parseISODate(date);
+  const askTracked = (await prisma.inventoryItem.count({ where: { trackPerVisit: true, archivedAt: null } })) > 0;
+  if (day && askTracked && (await unconfirmedVisitsOn(day)).length > 0) redirect(`/schedule/report/consumables?date=${date}`);
   redirect(`/schedule?view=day&date=${date}`);
 }

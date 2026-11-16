@@ -10,6 +10,7 @@ import { PhotoUploader } from "@/components/photo-uploader";
 import { ShiftPhotos } from "@/components/shift-photos";
 import { ConfirmButton } from "@/components/auto-submit";
 import { pendingShiftDays } from "@/lib/shift";
+import { unconfirmedVisitsOn } from "@/lib/consumables";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +33,7 @@ export default async function ShiftReportPage({ searchParams }: { searchParams: 
     where: { appointmentId: { in: aps.map((a) => a.id) } },
     _count: true,
   });
+  const toConfirm = (await unconfirmedVisitsOn(day)).length;
   const photosOf = (id: string) => photoCounts.find((p) => p.appointmentId === id)?._count ?? 0;
   // для правки процедуры: прайс и план каждого пациента
   const patientIds = [...new Set(aps.map((a) => a.patientId))];
@@ -166,7 +168,16 @@ export default async function ShiftReportPage({ searchParams }: { searchParams: 
           <p className="text-center text-xs text-ink-mute">Фото можно добавить и позже — в карточке пациента.</p>
         </form>
       ) : (
-        aps.length > 0 && <div className="card card-pad text-center text-emerald-700">Смена завершена ✓</div>
+        aps.length > 0 && (
+          <div className="space-y-2">
+            <div className="card card-pad text-center text-emerald-700">Смена завершена ✓</div>
+            {toConfirm > 0 && (
+              <Link href={`/schedule/report/consumables?date=${iso}`} className="btn-primary w-full py-3 text-[16px]">
+                💉 Подтвердить анестезию и оптрагейты · {toConfirm}
+              </Link>
+            )}
+          </div>
+        )
       )}
     </div>
   );
