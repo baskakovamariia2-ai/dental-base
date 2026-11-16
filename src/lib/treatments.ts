@@ -26,9 +26,13 @@ export function canalLabel(n: number) {
 const CANAL_NUM: Record<string, number> = { один: 1, одного: 1, одним: 1, два: 2, двух: 2, три: 3, трех: 3, трёх: 3, четыре: 4, четырех: 4, четырёх: 4 };
 
 export function canalCount(name: string): number | null {
-  const m = /(\d|один|одного|одним|два|двух|три|тр[её]х|четыре|четыр[её]х)\s*-?\s*канал/i.exec(name);
-  if (!m) return null;
-  return /^\d$/.test(m[1]) ? Number(m[1]) : CANAL_NUM[m[1].toLowerCase()] ?? null;
+  const m = /(\d|один|одного|одним|два|двух|три|тр[её]х|четыре|четыр[её]х)\s*-?\s*(?:х\s*-?\s*)?канал/i.exec(name);
+  if (m) return /^\d$/.test(m[1]) ? Number(m[1]) : CANAL_NUM[m[1].toLowerCase()] ?? null;
+  // «одноканальный», «двухканального», «трёхканальный», «четырёхканальный»
+  const w = /(одно|двух|дву|тр[её]х|четыр[её]х)\s*-?\s*канальн/i.exec(name);
+  if (!w) return null;
+  const k = w[1].toLowerCase().replace("ё", "е");
+  return k === "одно" ? 1 : k === "двух" || k === "дву" ? 2 : k === "трех" ? 3 : 4;
 }
 
 export const FOUR_CANAL_PRICE = 15000;
@@ -69,10 +73,14 @@ export function findPrice(treatment: string, items: { name: string; price: numbe
   if (/пульпит|периодонт|канал/.test(t) && !/реставрац/.test(t)) {
     const n = canalCount(t);
     if (n === 4) return FOUR_CANAL_PRICE; // 4-канальный зуб — фиксированная цена со скидкой
+    const endo = low.filter((i) => /пульпит|периодонт|канал|эндо/.test(i.n) && !/реставрац|пломб|распломб|перелеч|штифт/.test(i.n));
     if (n !== null) {
-      const hit = low.find((i) => canalCount(i.n) === n);
+      const hit = endo.find((i) => canalCount(i.n) === n) ?? low.find((i) => canalCount(i.n) === n);
       if (hit) return hit.price;
     }
+    // в прайсе одна строка без числа каналов («Лечение пульпита», «Лечение каналов»)
+    const plain = endo.filter((i) => canalCount(i.n) === null);
+    if (plain.length) return (plain.find((i) => (/периодонт/.test(t) ? /периодонт/ : /пульпит/).test(i.n)) ?? plain[0]).price;
     return null;
   }
   const rules: [RegExp, RegExp, RegExp?][] = [

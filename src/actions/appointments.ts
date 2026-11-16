@@ -6,7 +6,7 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { int, oneOf, optInt, optStr, safeReturn, str } from "@/lib/forms";
 import { addDays, parseISODate, parseInputDateTime, toISODate } from "@/lib/dates";
-import { completeAppointment } from "@/lib/appointments";
+import { completeAppointment, resyncCompletedAppointment } from "@/lib/appointments";
 import { trackedItems } from "@/lib/consumables";
 import { isValidTooth } from "@/lib/teeth";
 import { APPOINTMENT_STATUS, values } from "@/lib/labels";
@@ -64,7 +64,10 @@ export async function updateAppointment(id: string, formData: FormData) {
   const { status, ...rest } = data;
   await prisma.appointment.update({ where: { id }, data: { ...rest, startsAt: data.startsAt, ...(status !== "DONE" ? { status } : {}) } });
   const dayUrl = `/schedule?view=day&date=${toISODate(data.startsAt)}`;
-  if (status === "DONE") {
+  if (status === "DONE" && current.status === "DONE" && current.visitId) {
+    // запись уже была завершена — обновляем историю, план и заработок
+    await resyncCompletedAppointment(id);
+  } else if (status === "DONE") {
     await completeAppointment(id);
     const url = await consumablesUrl(id, dayUrl);
     revalidatePath("/", "layout");
@@ -103,6 +106,28 @@ export async function deleteAppointment(id: string) {
   const a = await prisma.appointment.delete({ where: { id } });
   revalidatePath("/", "layout");
   redirect(`/schedule?view=day&date=${toISODate(a.startsAt)}`);
+}
+
+/** Отчёт о смене: поправить процедуру, зуб и сумму (и у уже завершённой записи — историю, план, заработок) */
+export async function updateFromReport(id: string, formData: FormData) {
+  await requireUser();
+  const current = await prisma.appointment.findUniqueOrThrow({ where: { id } });
+  const back = safeReturn(formData, `/schedule/report?date=${toISODate(current.startsAt)}`);
+  const procedure = str(formData, "procedure", 200);
+  if (!procedure) redirect(back);
+  const tooth = optInt(formData, "toothNumber");
+  let treatmentItemId = optStr(formData, "treatmentItemId", 50);
+  if (treatmentItemId) {
+    const it = await prisma.treatmentItem.findUnique({ where: { id: treatmentItemId } });
+    if (!it || it.patientId !== current.patientId) treatmentItemId = null;
+  }
+  await prisma.appointment.update({
+    where: { id },
+    data: { procedure, price: optInt(formData, "price"), toothNumber: tooth !== null && isValidTooth(tooth) ? tooth : null, treatmentItemId },
+  });
+  if (current.status === "DONE" && current.visitId) await resyncCompletedAppointment(id);
+  revalidatePath("/", "layout");
+  redirect(back);
 }
 
 /** Вызывается кнопкой «Напомнить в Telegram» */

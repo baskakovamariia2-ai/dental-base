@@ -34,7 +34,8 @@ export function ProcedureFields({
   const fromChoice = (c: string) => {
     if (c.startsWith("plan:")) {
       const p = planById.get(c.slice(5));
-      return { procedure: p ? `${p.toothNumber ? `${p.toothNumber} — ` : ""}${p.treatment}` : "", price: p?.price ?? null, tooth: p?.toothNumber ?? null };
+      // у пункта плана нет цены — берём из прайса пациента
+      return { procedure: p ? `${p.toothNumber ? `${p.toothNumber} — ` : ""}${p.treatment}` : "", price: p ? p.price || findPrice(p.treatment, prices) : null, tooth: p?.toothNumber ?? null };
     }
     if (c === "__other") return { procedure: "", price: null, tooth: null };
     return { procedure: c, price: findPrice(c, prices), tooth: null };

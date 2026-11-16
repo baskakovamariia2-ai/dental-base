@@ -3,7 +3,9 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { addDays, parseISODate, startOfDay, toISODate } from "@/lib/dates";
 import { fmtDateLong, fmtTime, fullName, money } from "@/lib/format";
-import { finishShift, setAppointmentStatus } from "@/actions/appointments";
+import { finishShift, setAppointmentStatus, updateFromReport } from "@/actions/appointments";
+import { priceItemsFor } from "@/lib/plan";
+import { ProcedureFields } from "@/components/procedure-fields";
 import { PhotoUploader } from "@/components/photo-uploader";
 import { ConfirmButton } from "@/components/auto-submit";
 import { pendingShiftDays } from "@/lib/shift";
@@ -30,6 +32,18 @@ export default async function ShiftReportPage({ searchParams }: { searchParams: 
     _count: true,
   });
   const photosOf = (id: string) => photoCounts.find((p) => p.appointmentId === id)?._count ?? 0;
+  // для правки процедуры: прайс и план каждого пациента
+  const patientIds = [...new Set(aps.map((a) => a.patientId))];
+  const pricesBy = new Map<string, { name: string; price: number }[]>();
+  for (const pid of patientIds) pricesBy.set(pid, (await priceItemsFor(pid)).items.map((i) => ({ name: i.name, price: i.price })));
+  const planItems = await prisma.treatmentItem.findMany({
+    where: {
+      patientId: { in: patientIds },
+      OR: [{ status: { in: ["PLANNED", "IN_PROGRESS"] } }, { id: { in: aps.map((a) => a.treatmentItemId).filter((x): x is string => !!x) } }],
+    },
+    orderBy: [{ toothNumber: "asc" }, { sortOrder: "asc" }],
+  });
+  const planOf = (pid: string) => planItems.filter((i) => i.patientId === pid).map((i) => ({ id: i.id, toothNumber: i.toothNumber, treatment: i.treatment, price: i.price }));
   const active = aps.filter((a) => !["CANCELLED", "NO_SHOW"].includes(a.status));
   const open = active.filter((a) => a.status !== "DONE");
   const total = active.reduce((s, a) => s + (a.price ?? 0), 0);
@@ -78,6 +92,22 @@ export default async function ShiftReportPage({ searchParams }: { searchParams: 
                     {a.status === "DONE" ? "Завершён" : cancelled ? "Не пришёл" : "Был на приёме"}
                   </span>
                 </div>
+
+                {!cancelled && (
+                  <details className="rounded-xl bg-zinc-50 px-3 py-2">
+                    <summary className="cursor-pointer text-sm font-medium">✏️ Изменить процедуру или сумму</summary>
+                    <form action={updateFromReport.bind(null, a.id)} className="grid gap-3 pt-3 sm:grid-cols-2">
+                      <input type="hidden" name="returnTo" value={back} />
+                      <ProcedureFields
+                        prices={pricesBy.get(a.patientId) ?? []}
+                        plan={planOf(a.patientId)}
+                        initial={{ procedure: a.procedure, price: a.price, toothNumber: a.toothNumber, treatmentItemId: a.treatmentItemId }}
+                      />
+                      <button className="btn-primary sm:col-span-2">Сохранить</button>
+                      {a.status === "DONE" && <p className="text-xs text-ink-mute sm:col-span-2">Приём уже завершён — обновятся история пациента, план лечения, зубная формула и заработок. Если процедуру заменили, прежняя вернётся в план как невыполненная (не нужна — удалите её из плана).</p>}
+                    </form>
+                  </details>
+                )}
 
                 {!cancelled && (
                   <details className="rounded-xl bg-zinc-50 px-3 py-2">
