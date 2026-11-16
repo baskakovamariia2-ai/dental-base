@@ -2,7 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
-import { patientStats, buildToothInfo, ALL_TEETH } from "@/lib/teeth";
+import { patientStats, buildToothInfo, ALL_TEETH, isValidTooth } from "@/lib/teeth";
+import { syncPhotoTeeth } from "@/lib/photo-sync";
 import { OcclusalChart } from "@/components/occlusal-chart";
 import { getReminderTemplate, reminderText } from "@/lib/reminder";
 import { PHOTO_JAWS, PHOTO_STAGES, photoCaption } from "@/lib/photos";
@@ -38,11 +39,12 @@ export default async function PatientPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; tooth?: string }>;
 }) {
   await requireUser();
   const { id } = await params;
-  const { tab = "overview" } = await searchParams;
+  const { tab = "overview", tooth: toothParam } = await searchParams;
+  const openTooth = isValidTooth(Number(toothParam)) ? Number(toothParam) : null;
   const now = new Date();
   // цены из прайса подставляются в план автоматически (где цена ещё не указана)
   await moveItemNotesToTeeth(id);
@@ -50,6 +52,7 @@ export default async function PatientPage({
   await fillMissingPrices({ patientIds: [id] });
   await applyCrownRules(id);
   await recordDoneItems(id);
+  await syncPhotoTeeth(id);
 
   const patient = await prisma.patient.findUnique({
     where: { id },
@@ -94,6 +97,7 @@ export default async function PatientPage({
   const photos = patient.files.filter((f) => f.storageKey && f.category !== "CT" && (f.mimeType?.startsWith("image/") ?? false));
   const docs = patient.files.filter((f) => f.storageKey && f.category !== "CT" && !(f.mimeType?.startsWith("image/") ?? false));
   const links = patient.files.filter((f) => !f.storageKey && f.url);
+  const photoCount = (n: number) => photos.filter((f) => f.toothNumber === n).length;
   const photoTeeth = [...new Set(photos.map((f) => f.toothNumber).filter((n): n is number => n !== null))].sort((a: number, b: number) => a - b);
   const otherPhotos = photos.filter((f) => f.toothNumber === null && !f.jaw);
 
@@ -211,6 +215,7 @@ export default async function PatientPage({
             <OcclusalChart
               className="mx-auto w-full max-w-[300px]"
               infoOf={buildToothInfo(patient.teeth, planItems)}
+              hrefOf={(n) => `/patients/${patient.id}?tab=treatment&tooth=${n}`}
             />
           </div>
           <div>
@@ -221,6 +226,7 @@ export default async function PatientPage({
               teeth={patient.teeth.map((t) => ({ number: t.number, status: t.status, notes: t.notes, patientNote: t.patientNote, patientNoteVisible: t.patientNoteVisible }))}
               plan={planItems.map((i) => ({ id: i.id, toothNumber: i.toothNumber, treatment: i.treatment, price: i.price, status: i.status, note: i.note, internalNote: i.internalNote }))}
               photos={photos.filter((f) => f.toothNumber !== null).map((f) => ({ id: f.id, toothNumber: f.toothNumber, stage: f.stage }))}
+              initialOpen={openTooth}
             />
           </div>
           <div>
@@ -267,7 +273,14 @@ export default async function PatientPage({
                         {v.items.map((i) => (
                     <div key={i.id} className={`px-4 py-3 ${i.status === "CANCELLED" ? "opacity-50" : ""}`}>
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 md:grid md:grid-cols-[56px_1fr_110px_170px_40px]">
-                        <span className="text-[15px] font-semibold tabular-nums">{i.toothNumber ?? "—"}</span>
+                        {i.toothNumber ? (
+                          <Link href={`/patients/${patient.id}?tab=treatment&tooth=${i.toothNumber}`} className="text-[15px] font-semibold tabular-nums text-accent-ink underline decoration-dotted underline-offset-4">
+                            {i.toothNumber}
+                            {photoCount(i.toothNumber) > 0 && <span className="ml-1 text-xs font-normal no-underline">📷{photoCount(i.toothNumber)}</span>}
+                          </Link>
+                        ) : (
+                          <span className="text-[15px] font-semibold tabular-nums">—</span>
+                        )}
                         <span className="min-w-0 flex-1 text-[15px] md:flex-none">
                           {i.treatment}
     

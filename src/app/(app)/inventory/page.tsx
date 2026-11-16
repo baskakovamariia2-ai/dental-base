@@ -5,8 +5,8 @@ import { requireUser } from "@/lib/auth";
 import { fmtQty, money } from "@/lib/format";
 import { toISODate } from "@/lib/dates";
 import { INVENTORY_CATEGORY, INVENTORY_CATEGORY_ALL, STOCK_LEVEL, categoryGroup, findOpt } from "@/lib/labels";
-import { autoCategorize, clearInventory, openNewPackage, setOpenLevel } from "@/actions/inventory";
-import { loadClinicInventory, resetExportKey } from "@/actions/consumables";
+import { openNewPackage, setOpenLevel } from "@/actions/inventory";
+import { resetExportKey } from "@/actions/consumables";
 import { headers } from "next/headers";
 import { getExportKey } from "@/lib/export-key";
 import { ConfirmButton } from "@/components/auto-submit";
@@ -76,7 +76,6 @@ export default async function InventoryPage({
         action={
           <div className="flex gap-2">
             <Link href="/procedures" className="btn-secondary">₽ <span className="hidden sm:inline">Себестоимость</span></Link>
-            <Link href="/inventory/import" className="btn-secondary">🎙 <span className="hidden sm:inline">Списком</span></Link>
             <Link href="/inventory/new" className="btn-accent"><IconPlus /> <span className="hidden sm:inline">Добавить</span></Link>
           </div>
         }
@@ -259,21 +258,6 @@ export default async function InventoryPage({
         </div>
       </details>
 
-      <div className="mt-6 space-y-3 border-t border-zinc-200 pt-6">
-        <form action={loadClinicInventory}>
-          <ConfirmButton className="btn-secondary" message="Добавить из описи (ноябрь 2026) позиции, которых нет на складе? То, что уже есть, не изменится: количество, минимальный остаток и цены останутся вашими.">
-            📋 Добавить недостающее из описи
-          </ConfirmButton>
-        </form>
-        <div className="flex flex-wrap gap-2">
-          <form action={autoCategorize}>
-            <button className="btn-secondary">✨ Разложить «Другое» по категориям</button>
-          </form>
-          <form action={clearInventory}>
-            <ConfirmButton message="Удалить ВЕСЬ склад? Все позиции пропадут из списка (история закупок сохранится в базе).">Удалить весь склад</ConfirmButton>
-          </form>
-        </div>
-      </div>
     </div>
   );
 }

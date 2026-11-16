@@ -3,7 +3,8 @@ import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { fmtDate } from "@/lib/format";
-import { photoCaption } from "@/lib/photos";
+import { PHOTO_JAWS, PHOTO_STAGES, photoCaption } from "@/lib/photos";
+import { isValidTooth } from "@/lib/teeth";
 import { removeFile } from "@/lib/storage";
 import { revalidatePath } from "next/cache";
 import { ConfirmButton } from "@/components/auto-submit";
@@ -17,6 +18,24 @@ async function deletePhoto(patientId: string, id: string) {
   await removeFile(f.storageKey);
   revalidatePath(`/patients/${patientId}`);
   redirect(`/patients/${patientId}?tab=files`);
+}
+
+async function editPhoto(patientId: string, id: string, formData: FormData) {
+  "use server";
+  await requireUser();
+  const n = Number(formData.get("toothNumber"));
+  const toothNumber = isValidTooth(n) ? n : null;
+  const stageRaw = String(formData.get("stage") ?? "");
+  const stage = ["BEFORE", "DURING", "AFTER"].includes(stageRaw) ? stageRaw : null;
+  const jawRaw = String(formData.get("jaw") ?? "");
+  const jaw = !toothNumber && ["UPPER", "LOWER"].includes(jawRaw) ? jawRaw : null;
+  const comment = String(formData.get("comment") ?? "").slice(0, 1000) || null;
+  await prisma.patientFile.update({
+    where: { id },
+    data: { toothNumber, stage, jaw, comment, photoTag: photoCaption({ toothNumber, stage, jaw, photoTag: null }) },
+  });
+  revalidatePath(`/patients/${patientId}`);
+  revalidatePath(`/patients/${patientId}/photo/${id}`);
 }
 
 /** Просмотр фото внутри приложения — с кнопкой «Назад» (на экране «Домой» нет кнопки браузера) */
@@ -64,6 +83,34 @@ export default async function PhotoPage({ params }: { params: Promise<{ id: stri
         {same.length > 1 && <span className="text-sm text-ink-mute">{i + 1} / {same.length}</span>}
         {next ? <Link href={`/patients/${id}/photo/${next}`} className="btn-secondary flex-1">Следующее ›</Link> : <span className="flex-1" />}
       </div>
+
+      <details className="card">
+        <summary className="cursor-pointer list-none px-4 py-3 text-[15px] font-medium">✏️ Подписать фото: зуб, этап</summary>
+        <form action={editPhoto.bind(null, id, f.id)} className="grid grid-cols-2 gap-2 px-4 pb-4">
+          <label className="block"><span className="label">Зуб</span><input name="toothNumber" inputMode="numeric" defaultValue={f.toothNumber ?? ""} placeholder="например 47" className="input" /></label>
+          <label className="block">
+            <span className="label">Этап</span>
+            <select name="stage" defaultValue={f.stage ?? ""} className="input">
+              <option value="">—</option>
+              {PHOTO_STAGES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </select>
+          </label>
+          <label className="col-span-2 block">
+            <span className="label">Или все зубы (если зуб не указан)</span>
+            <select name="jaw" defaultValue={f.jaw ?? ""} className="input">
+              <option value="">—</option>
+              {PHOTO_JAWS.map((j) => <option key={j.value} value={j.value}>{j.label}</option>)}
+            </select>
+          </label>
+          <label className="col-span-2 block"><span className="label">Комментарий</span><input name="comment" defaultValue={f.comment ?? ""} className="input" /></label>
+          <button className="btn-primary col-span-2">Сохранить</button>
+          <p className="col-span-2 text-xs text-ink-mute">Фото с номером зуба появится в «Файлах» в строке зуба, в карточке зуба на вкладке «Лечение» и в плане (📷 рядом с номером зуба).</p>
+        </form>
+      </details>
+
+      {f.toothNumber && (
+        <Link href={`/patients/${id}?tab=treatment&tooth=${f.toothNumber}`} className="btn-secondary w-full">🦷 Открыть зуб {f.toothNumber}</Link>
+      )}
 
       <form action={deletePhoto.bind(null, id, f.id)}>
         <ConfirmButton message="Удалить фото?" className="w-full py-2 text-sm text-rose-600">Удалить фото</ConfirmButton>

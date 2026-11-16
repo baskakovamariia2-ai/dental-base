@@ -2,7 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { logout, changePassword } from "@/actions/auth";
-import { addUser, clearDemo, seedDemo, toggleUserActive } from "@/actions/admin";
+import { addUser, clearDemo, toggleUserActive } from "@/actions/admin";
 import { saveReminderTemplate, saveSettings } from "@/actions/settings";
 import { getReminderTemplate } from "@/lib/reminder";
 import { getSettings } from "@/lib/settings";
@@ -51,7 +51,7 @@ export default async function MorePage({ searchParams }: { searchParams: Promise
       {sp.welcome && (
         <div className="card card-pad bg-accent-soft/60">
           <div className="font-medium text-accent-ink">Добро пожаловать в Dental Base!</div>
-          <p className="mt-1 text-sm text-accent-ink/80">Ниже добавьте аккаунт врача (роль «Врач» — он будет подставляться в записи и приёмы). Чтобы посмотреть, как всё работает, можно загрузить DEMO-пациентов, а потом удалить их одной кнопкой.</p>
+          <p className="mt-1 text-sm text-accent-ink/80">Ниже добавьте аккаунт врача (роль «Врач» — он будет подставляться в записи и приёмы).</p>
         </div>
       )}
 
@@ -136,18 +136,14 @@ export default async function MorePage({ searchParams }: { searchParams: Promise
         </form>
       </section>
 
-      {isOwner && (
+      {isOwner && demoCount > 0 && (
         <section>
           <h2 className="section-title">Тестовые данные</h2>
           <div className="card card-pad flex flex-wrap items-center gap-3">
             <p className="flex-1 text-sm text-ink-soft">
               {demoCount ? `Сейчас в системе ${demoCount} DEMO-пациента (помечены жёлтой меткой DEMO).` : "Три вымышленных пациента, записи и товары, чтобы попробовать систему."}
             </p>
-            {demoCount ? (
-              <form action={clearDemo}><ConfirmButton message="Удалить все DEMO-данные?">Удалить DEMO</ConfirmButton></form>
-            ) : (
-              <form action={seedDemo}><button className="btn-secondary">Загрузить DEMO</button></form>
-            )}
+            <form action={clearDemo}><ConfirmButton message="Удалить все DEMO-данные?">Удалить DEMO</ConfirmButton></form>
           </div>
         </section>
       )}

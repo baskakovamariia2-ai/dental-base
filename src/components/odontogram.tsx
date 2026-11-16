@@ -4,7 +4,7 @@ import Link from "next/link";
 import { PhotoUploader } from "./photo-uploader";
 import { stageLabel } from "@/lib/photos";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { ToothStatus, TreatmentStatus } from "@prisma/client";
 import { saveTooth } from "@/actions/teeth";
 import { addTreatmentItem, deleteTreatmentItem, updateTreatmentItem } from "@/actions/treatment";
@@ -22,8 +22,12 @@ const OPEN = (s: TreatmentStatus) => s === "PLANNED" || s === "IN_PROGRESS";
 
 export type ToothPhoto = { id: string; toothNumber: number | null; stage: string | null };
 
-export function Odontogram({ patientId, teeth, plan, prices, photos = [] }: { patientId: string; teeth: ToothData[]; plan: PlanItemData[]; prices: PriceOption[]; photos?: ToothPhoto[] }) {
-  const [open, setOpen] = useState<number | null>(null);
+export function Odontogram({ patientId, teeth, plan, prices, photos = [], initialOpen = null }: { patientId: string; teeth: ToothData[]; plan: PlanItemData[]; prices: PriceOption[]; photos?: ToothPhoto[]; initialOpen?: number | null }) {
+  const [open, setOpen] = useState<number | null>(initialOpen);
+  // нажали на зуб на схеме «во рту» или в плане — открываем его карточку
+  useEffect(() => {
+    if (initialOpen) setOpen(initialOpen);
+  }, [initialOpen]);
   const map = new Map(teeth.map((t) => [t.number, t]));
   const get = (n: number): ToothData => map.get(n) ?? { number: n, status: "HEALTHY", notes: null, patientNote: null, patientNoteVisible: true };
   const planFor = (n: number) => plan.filter((p) => p.toothNumber === n && p.status !== "CANCELLED");

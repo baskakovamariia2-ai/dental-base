@@ -1,3 +1,4 @@
+import type React from "react";
 import { COLOR, LOWER, UPPER, toothKind, type ToothInfo } from "@/lib/teeth";
 
 // Вид зубов во рту сверху (как на анатомической схеме): дёсны, нёбо, язык, зубы плотно по дуге.
@@ -134,7 +135,8 @@ function Tooth({ p, info }: { p: Placed; info: ToothInfo }) {
   );
 }
 
-export function OcclusalChart({ infoOf, className = "" }: { infoOf: (n: number) => ToothInfo; className?: string }) {
+export function OcclusalChart({ infoOf, className = "", hrefOf }: { infoOf: (n: number) => ToothInfo; className?: string; hrefOf?: (n: number) => string }) {
+  const wrap = (n: number, el: React.ReactNode) => (hrefOf ? <a key={n} href={hrefOf(n)} aria-label={`Зуб ${n}`}>{el}</a> : el);
   const up = place(UPPER, true);
   const low = place(LOWER, false);
 
@@ -166,8 +168,8 @@ export function OcclusalChart({ infoOf, className = "" }: { infoOf: (n: number) 
         <path key={i} d={`M${CX - 10 + i} ${CY_LOW + 60 + i * 24} h${20 - i * 2}`} stroke="#D6A0B0" strokeWidth={1.2} strokeLinecap="round" />
       ))}
 
-      {up.map((p) => <Tooth key={p.n} p={p} info={infoOf(p.n)} />)}
-      {low.map((p) => <Tooth key={p.n} p={p} info={infoOf(p.n)} />)}
+      {up.map((p) => wrap(p.n, <Tooth key={p.n} p={p} info={infoOf(p.n)} />))}
+      {low.map((p) => wrap(p.n, <Tooth key={p.n} p={p} info={infoOf(p.n)} />))}
       {[...up, ...low].map((p) => (
         <text key={`l${p.n}`} x={p.lx} y={p.ly} textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight={600} fill="#3F3F46">
           {p.n}
