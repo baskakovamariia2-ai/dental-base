@@ -29,6 +29,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const jaw = !toothNumber && ["UPPER", "LOWER"].includes(jawRaw) ? jawRaw : null;
   const apRaw = String(fd.get("appointmentId") ?? "");
   const appointmentId = apRaw ? (await prisma.appointment.findFirst({ where: { id: apRaw, patientId: id }, select: { id: true } }))?.id ?? null : null;
+  const takenRaw = new Date(String(fd.get("takenAt") ?? ""));
+  const takenAt = !isNaN(takenRaw.getTime()) && takenRaw.getFullYear() > 2000 && takenRaw.getTime() < Date.now() + 86400000 ? takenRaw : null;
   const tag = toothNumber || jaw || stage ? photoCaption({ toothNumber, stage, jaw, photoTag: null }) : photoTag;
 
   let saved = 0;
@@ -44,6 +46,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         stage,
         jaw,
         appointmentId,
+        ...(takenAt ? { date: takenAt } : {}),
         comment,
         title: title || file.name || "Файл",
         fileName: file.name?.slice(0, 200) || null,

@@ -191,7 +191,12 @@ function Compact({ a }: { a: AppointmentWith }) {
 }
 
 function CompleteDayButton({ date, count }: { date: string; count: number }) {
-  if (!count) return null;
+  if (!count)
+    return (
+      <Link href={`/schedule/report?date=${date}&photos=1`} className="btn-secondary mt-2 w-full">
+        📥 Фото смены
+      </Link>
+    );
   return (
     <Link href={`/schedule/report?date=${date}`} className="btn-primary mt-2 w-full">
       📝 Отчёт и завершить смену ({count})

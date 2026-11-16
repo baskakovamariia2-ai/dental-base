@@ -7,13 +7,14 @@ import { finishShift, setAppointmentStatus, updateFromReport } from "@/actions/a
 import { priceItemsFor } from "@/lib/plan";
 import { ProcedureFields } from "@/components/procedure-fields";
 import { PhotoUploader } from "@/components/photo-uploader";
+import { ShiftPhotos } from "@/components/shift-photos";
 import { ConfirmButton } from "@/components/auto-submit";
 import { pendingShiftDays } from "@/lib/shift";
 
 export const dynamic = "force-dynamic";
 
 /** Отчёт о смене: кто пришёл, фото (по желанию), затем «Завершить смену» */
-export default async function ShiftReportPage({ searchParams }: { searchParams: Promise<{ date?: string }> }) {
+export default async function ShiftReportPage({ searchParams }: { searchParams: Promise<{ date?: string; photos?: string }> }) {
   await requireUser();
   const sp = await searchParams;
   const day = parseISODate(sp.date) ?? startOfDay(new Date());
@@ -69,6 +70,29 @@ export default async function ShiftReportPage({ searchParams }: { searchParams: 
             </Link>
           ))}
         </div>
+      )}
+
+      {aps.some((a) => !["CANCELLED", "NO_SHOW"].includes(a.status)) && (
+        <details className="card" open={sp.photos === "1"}>
+          <summary className="cursor-pointer list-none px-4 py-3.5">
+            <span className="block text-[15px] font-medium">📥 Все фото смены сразу</span>
+            <span className="block text-xs text-ink-mute">Выберите все фото за день — база сама разложит их по пациентам по времени</span>
+          </summary>
+          <div className="px-4 pb-4">
+            <ShiftPhotos
+              aps={aps
+                .filter((a) => !["CANCELLED", "NO_SHOW"].includes(a.status))
+                .map((a) => ({
+                  id: a.id,
+                  patientId: a.patient.id,
+                  name: fullName(a.patient),
+                  start: a.startsAt.toISOString(),
+                  end: new Date(a.startsAt.getTime() + a.durationMin * 60_000).toISOString(),
+                  toothNumber: a.toothNumber,
+                }))}
+            />
+          </div>
+        </details>
       )}
 
       {aps.length === 0 ? (
