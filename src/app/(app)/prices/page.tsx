@@ -12,9 +12,8 @@ export default async function PricesPage() {
     include: { _count: { select: { items: true, patients: true } } },
   });
   const patients = await prisma.patient.findMany({
-    where: { archivedAt: null },
-    select: { id: true, lastName: true, firstName: true, middleName: true, priceListId: true },
-    orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+    select: { id: true, lastName: true, firstName: true, middleName: true, priceListId: true, archivedAt: true },
+    orderBy: [{ archivedAt: { sort: "asc", nulls: "first" } }, { lastName: "asc" }, { firstName: "asc" }],
   });
   const current = lists.find((l) => l.isDefault);
   const groups = [
@@ -72,7 +71,10 @@ export default async function PricesPage() {
                 <div className="divide-y divide-zinc-100 border-t border-zinc-100">
                   {g.items.map((p) => (
                     <Link key={p.id} href={`/patients/${p.id}?tab=prices`} className="flex items-center gap-3 px-4 py-2.5 hover:bg-zinc-50">
-                      <span className="min-w-0 flex-1 truncate text-[15px]">{[p.lastName, p.firstName, p.middleName].filter(Boolean).join(" ")}</span>
+                      <span className={`min-w-0 flex-1 truncate text-[15px] ${p.archivedAt ? "text-ink-mute" : ""}`}>
+                        {[p.lastName, p.firstName, p.middleName].filter(Boolean).join(" ")}
+                        {p.archivedAt && <span className="ml-1 text-sm">(архив)</span>}
+                      </span>
                       <span className="text-xs text-ink-mute">сменить ›</span>
                     </Link>
                   ))}
@@ -80,7 +82,7 @@ export default async function PricesPage() {
               </details>
             ))}
           </div>
-          <p className="mt-2 px-1 text-xs text-ink-mute">Нажмите на прайс, чтобы увидеть его пациентов. Нажмите на пациента — откроется его вкладка «Прайс», где прайс можно поменять.</p>
+          <p className="mt-2 px-1 text-xs text-ink-mute">Нажмите на прайс, чтобы увидеть его пациентов. Нажмите на пациента — откроется его вкладка «Прайс», где прайс можно поменять. Пациенты из архива — в конце списка, с пометкой «(архив)».</p>
         </section>
       )}
     </div>
