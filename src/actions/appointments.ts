@@ -7,6 +7,7 @@ import { requireUser } from "@/lib/auth";
 import { int, oneOf, optInt, optStr, safeReturn, str } from "@/lib/forms";
 import { addDays, parseISODate, parseInputDateTime, toISODate } from "@/lib/dates";
 import { completeAppointment } from "@/lib/appointments";
+import { trackedItems } from "@/lib/consumables";
 import { isValidTooth } from "@/lib/teeth";
 import { APPOINTMENT_STATUS, values } from "@/lib/labels";
 
@@ -23,6 +24,16 @@ function readAppointment(fd: FormData) {
     status: oneOf(fd, "status", values(APPOINTMENT_STATUS), "SCHEDULED"),
     comment: optStr(fd, "comment", 2000),
   };
+}
+
+/** После завершения одного приёма — на экран «Подтвердите расходники» (если есть, о чём спрашивать) */
+async function consumablesUrl(appointmentId: string, back: string) {
+  const a = await prisma.appointment.findUnique({ where: { id: appointmentId } });
+  if (!a?.visitId) return null;
+  const v = await prisma.visit.findUnique({ where: { id: a.visitId } });
+  if (!v || v.consumablesConfirmed) return null;
+  if ((await trackedItems()).length === 0) return null;
+  return `/visits/${v.id}/consumables?${new URLSearchParams({ back })}`;
 }
 
 export async function createAppointment(formData: FormData) {
@@ -52,18 +63,29 @@ export async function updateAppointment(id: string, formData: FormData) {
   }
   const { status, ...rest } = data;
   await prisma.appointment.update({ where: { id }, data: { ...rest, startsAt: data.startsAt, ...(status !== "DONE" ? { status } : {}) } });
-  if (status === "DONE") await completeAppointment(id);
+  const dayUrl = `/schedule?view=day&date=${toISODate(data.startsAt)}`;
+  if (status === "DONE") {
+    await completeAppointment(id);
+    const url = await consumablesUrl(id, dayUrl);
+    revalidatePath("/", "layout");
+    if (url) redirect(url);
+  }
   revalidatePath("/", "layout");
-  redirect(`/schedule?view=day&date=${toISODate(data.startsAt)}`);
+  redirect(dayUrl);
 }
 
 export async function setAppointmentStatus(id: string, formData: FormData) {
   await requireUser();
   const status = oneOf(formData, "status", values(APPOINTMENT_STATUS), "SCHEDULED");
-  if (status === "DONE") await completeAppointment(id);
-  else await prisma.appointment.update({ where: { id }, data: { status } });
-  revalidatePath("/", "layout");
   const back = safeReturn(formData, "");
+  if (status === "DONE") {
+    await completeAppointment(id);
+    const a = await prisma.appointment.findUnique({ where: { id } });
+    const url = await consumablesUrl(id, back || (a ? `/schedule?view=day&date=${toISODate(a.startsAt)}` : "/schedule"));
+    revalidatePath("/", "layout");
+    if (url) redirect(url);
+  } else await prisma.appointment.update({ where: { id }, data: { status } });
+  revalidatePath("/", "layout");
   if (back) redirect(back);
 }
 

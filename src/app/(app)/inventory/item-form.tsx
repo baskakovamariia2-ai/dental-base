@@ -33,6 +33,10 @@ export function ItemForm({
           <input type="checkbox" name="countable" defaultChecked={item?.countable ?? true} className="h-5 w-5 accent-teal-700" />
           Считаем штуками (если выключить — отмечаем «много / есть / мало / нет»)
         </label>
+        <label className="flex items-center gap-3 rounded-xl bg-zinc-50 px-3.5 py-3 text-sm sm:col-span-2">
+          <input type="checkbox" name="trackPerVisit" defaultChecked={item?.trackPerVisit ?? false} className="h-5 w-5 accent-teal-700" />
+          Спрашивать после каждого приёма, сколько ушло (как анестезию и оптрагейт)
+        </label>
         <Field label="Количество"><input name="quantity" inputMode="decimal" defaultValue={item?.quantity ?? 0} className="input" /></Field>
         <Field label="Минимальный остаток"><input name="minQuantity" inputMode="decimal" defaultValue={item?.minQuantity ?? 1} className="input" /></Field>
         <Field label="Уровень (если не считаем штуками)">

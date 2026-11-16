@@ -38,6 +38,7 @@ export default async function MorePage({ searchParams }: { searchParams: Promise
     { href: "/search", label: "Поиск", Icon: IconSearch },
     { href: "/prices", label: "Прайсы", Icon: IconTag },
     { href: "/earnings", label: "Заработок", Icon: IconChart },
+    { href: "/procedures", label: "Себестоимость процедур", Icon: IconTag },
     { href: "/stats", label: "Статистика", Icon: IconChart },
     { href: "/patients?filter=archived", label: "Архив пациентов", Icon: IconUsers },
     { href: "/storage", label: "Хранилище", Icon: IconDisk },

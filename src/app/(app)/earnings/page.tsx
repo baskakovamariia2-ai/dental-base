@@ -21,6 +21,8 @@ export default async function EarningsPage({ searchParams }: { searchParams: Pro
   const future = rows.filter((r) => r.future);
   const revenue = past.reduce((s, r) => s + r.revenue, 0);
   const expenses = past.reduce((s, r) => s + r.rent + r.sterilization, 0);
+  const consumables = past.reduce((s, r) => s + r.consumables, 0);
+  const unconfirmed = past.reduce((s, r) => s + r.unconfirmed, 0);
   const futureExpenses = future.reduce((s, r) => s + r.rent + r.sterilization, 0);
   const monthKey = (d: Date) => toISODate(d).slice(0, 7);
   const title = m.toLocaleDateString("ru-RU", { month: "long", year: "numeric" });
@@ -32,7 +34,7 @@ export default async function EarningsPage({ searchParams }: { searchParams: Pro
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Заработок" subtitle="Выручка — из стоимости приёмов. Расходы — аренда и стерилизация за каждый рабочий день." back="/more" />
+      <PageHeader title="Заработок" subtitle="Выручка — из стоимости приёмов. Расходы — аренда, стерилизация и расходники на каждый приём." back="/more" />
 
       <div className="flex items-center gap-2">
         <Link href={`/earnings?month=${monthKey(addMonths(m, -1))}`} className="btn-secondary h-11 w-11 px-0" aria-label="Предыдущий месяц"><IconBack /></Link>
@@ -40,10 +42,11 @@ export default async function EarningsPage({ searchParams }: { searchParams: Pro
         <Link href={`/earnings?month=${monthKey(next)}`} className="btn-secondary h-11 w-11 px-0" aria-label="Следующий месяц"><IconChevron /></Link>
       </div>
 
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-5">
         <Stat label="Выручка" value={money(revenue)} />
         <Stat label="Аренда + стерилизация" value={money(expenses)} hint={`рабочих дней: ${past.length}`} />
-        <Stat label="Чистыми" value={<span className={revenue - expenses < 0 ? "text-rose-600" : "text-emerald-700"}>{money(revenue - expenses)}</span>} />
+        <Stat label="Расходники" value={money(consumables)} hint={unconfirmed ? `не подтверждено: ${unconfirmed}` : "анестезия, оптрагейт, материалы"} />
+        <Stat label="Чистыми" value={<span className={revenue - expenses - consumables < 0 ? "text-rose-600" : "text-emerald-700"}>{money(revenue - expenses - consumables)}</span>} />
         <Stat label="Предстоит расходов" value={money(futureExpenses)} hint={`запланировано дней: ${future.length}`} />
       </div>
 
@@ -62,7 +65,7 @@ export default async function EarningsPage({ searchParams }: { searchParams: Pro
                       {r.future && <span className="ml-2 rounded-full bg-sky-50 px-2 py-0.5 text-xs font-normal text-sky-700">предстоит</span>}
                     </span>
                     <span className="block text-xs text-ink-mute">
-                      {r.future ? `записей: ${r.appointments}` : `приёмов: ${r.visits}`} · выручка {money(r.revenue)} · расходы {money(r.rent + r.sterilization)}
+                      {r.future ? `записей: ${r.appointments}` : `приёмов: ${r.visits}`} · выручка {money(r.revenue)} · расходы {money(r.rent + r.sterilization)}{r.consumables ? ` · расходники ${money(r.consumables)}` : ""}
                       {r.overridden ? " (изменены)" : ""}
                     </span>
                   </span>
@@ -108,13 +111,21 @@ function DayPatients({ d }: { d?: DayDetail }) {
       </div>
       <div className="divide-y divide-zinc-100 rounded-xl bg-zinc-50">
         {d.paid.map((p, i) => (
-          <Link key={`p${i}`} href={`/patients/${p.patientId}?tab=history`} className="flex items-start gap-3 px-3 py-2">
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-[15px] font-medium">{p.name}</span>
-              <span className="block truncate text-xs text-ink-mute">{p.what}</span>
-            </span>
-            <span className="shrink-0 font-semibold tabular-nums">{money(p.amount)}</span>
-          </Link>
+          <div key={`p${i}`} className="px-3 py-2">
+            <Link href={`/patients/${p.patientId}?tab=history`} className="flex items-start gap-3">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[15px] font-medium">{p.name}</span>
+                <span className="block truncate text-xs text-ink-mute">{p.what}</span>
+              </span>
+              <span className="shrink-0 font-semibold tabular-nums">{money(p.amount)}</span>
+            </Link>
+            {p.visitId && (
+              <Link href={`/visits/${p.visitId}/consumables?back=${encodeURIComponent("/earnings")}`} className="mt-0.5 flex justify-between text-xs">
+                <span className={p.confirmed ? "text-ink-mute" : "font-medium text-amber-700"}>{p.confirmed ? "расходники" : "подтвердите расходники →"}</span>
+                <span className="tabular-nums text-ink-mute">{p.consumables ? `− ${money(p.consumables)}` : "—"}</span>
+              </Link>
+            )}
+          </div>
         ))}
         {d.open.map((p, i) => (
           <Link key={`o${i}`} href={`/patients/${p.patientId}`} className="flex items-start gap-3 px-3 py-2">

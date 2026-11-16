@@ -1,4 +1,5 @@
 import { prisma } from "./db";
+import { attachDefaultConsumables } from "./consumables";
 import { syncToothWithPlan } from "./plan";
 import { isValidTooth } from "./teeth";
 
@@ -53,6 +54,7 @@ export async function completeAppointment(id: string) {
     },
   });
   await prisma.appointment.update({ where: { id }, data: { status: "DONE", visitId: visit.id, treatmentItemId: itemId } });
+  await attachDefaultConsumables(visit.id, a.procedure);
   if (itemId) await prisma.treatmentItem.update({ where: { id: itemId }, data: { visitId: visit.id } });
   await syncToothWithPlan(a.patientId, tooth);
 }

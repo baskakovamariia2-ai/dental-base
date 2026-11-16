@@ -148,6 +148,11 @@ model Visit {
   cost            Int      @default(0)
   comment         String?
   source          String? // "plan" — создан автоматически при «Завершено» в плане
+  procedureId     String? // шаблон процедуры для расходников (кариес, чистка…)
+  procedureTpl    Procedure? @relation(fields: [procedureId], references: [id], onDelete: SetNull)
+  consumablesCost Int? // себестоимость расходников этого приёма, ₽
+  consumablesConfirmed Boolean @default(false) // подтвердили ли анестезию/оптрагейт после приёма
+  consumables     VisitConsumable[]
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -392,12 +397,56 @@ model InventoryItem {
   toBuyQuantity     Float? // если задано — товар в списке «Закупить»
   countable         Boolean           @default(true) // false — считаем уровнем (много/мало)
   level             StockLevel?
+  openLevel         StockLevel? // сколько осталось в открытой упаковке (много / мало)
+  trackPerVisit     Boolean           @default(false) // спрашивать после каждого приёма (анестезия, оптрагейт)
   archivedAt        DateTime?
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
   purchases         Purchase[]
+  procedureItems    ProcedureItem[]
+  visitConsumables  VisitConsumable[]
 
   @@index([category])
+}
+
+// ───────────── Процедуры: из чего складывается себестоимость ─────────────
+
+model Procedure {
+  id        String          @id @default(cuid())
+  name      String
+  keywords  String? // слова через запятую — по ним процедура подбирается к записи
+  sortOrder Int             @default(0)
+  items     ProcedureItem[]
+  visits    Visit[]
+  createdAt DateTime        @default(now())
+}
+
+model ProcedureItem {
+  id          String         @id @default(cuid())
+  procedureId String
+  procedure   Procedure      @relation(fields: [procedureId], references: [id], onDelete: Cascade)
+  itemId      String?
+  item        InventoryItem? @relation(fields: [itemId], references: [id], onDelete: SetNull)
+  name        String
+  qty         Float          @default(1) // сколько уходит на процедуру
+  perUnit     Float          @default(1) // на сколько таких порций хватает одной единицы склада (шприц композита ≈ 24)
+  price       Int? // цена единицы, если у позиции склада нет цены
+  sortOrder   Int            @default(0)
+
+  @@index([procedureId])
+}
+
+model VisitConsumable {
+  id      String         @id @default(cuid())
+  visitId String
+  visit   Visit          @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  itemId  String?
+  item    InventoryItem? @relation(fields: [itemId], references: [id], onDelete: SetNull)
+  name    String
+  qty     Float
+  cost    Int
+
+  @@index([visitId])
 }
 
 model Purchase {

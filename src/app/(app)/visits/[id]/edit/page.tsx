@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
@@ -16,7 +17,7 @@ export default async function EditVisitPage({ params }: { params: Promise<{ id: 
   const doctors = await getDoctors();
   return (
     <div>
-      <PageHeader title="Приём" subtitle={fullName(visit.patient)} back={`/patients/${visit.patientId}?tab=history`} />
+      <PageHeader title="Приём" subtitle={fullName(visit.patient)} back={`/patients/${visit.patientId}?tab=history`} action={<Link href={`/visits/${visit.id}/consumables?back=${encodeURIComponent(`/visits/${visit.id}/edit`)}`} className="btn-secondary">Расходники</Link>} />
       <form action={updateVisit.bind(null, id)} className="space-y-4">
         <VisitFields visit={visit} doctors={doctors} defaultDoctorId={doctors[0]?.id ?? user.id} />
         <button className="btn-primary w-full sm:w-auto">Сохранить</button>

@@ -10,6 +10,8 @@ export type DayRow = {
   revenue: number;
   rent: number;
   sterilization: number;
+  consumables: number; // расходники по приёмам (себестоимость)
+  unconfirmed: number; // приёмов, где не подтвердили анестезию/оптрагейт
   net: number;
   future: boolean;
   overridden: boolean;
@@ -22,7 +24,7 @@ export type DayRow = {
 export async function earningsByDay(from: Date, to: Date): Promise<DayRow[]> {
   await fixPlanVisitsOnce();
   const [visits, aps, overrides, settings] = await Promise.all([
-    prisma.visit.findMany({ where: { date: { gte: from, lt: to } }, select: { date: true, cost: true, source: true, patientId: true } }),
+    prisma.visit.findMany({ where: { date: { gte: from, lt: to } }, select: { date: true, cost: true, source: true, patientId: true, consumablesCost: true, consumablesConfirmed: true, procedureId: true } }),
     prisma.appointment.findMany({
       where: { startsAt: { gte: from, lt: to }, status: { notIn: ["CANCELLED", "NO_SHOW"] } },
       select: { startsAt: true, patientId: true },
@@ -37,7 +39,7 @@ export async function earningsByDay(from: Date, to: Date): Promise<DayRow[]> {
   const get = (d: string) => {
     let row = days.get(d);
     if (!row) {
-      row = { date: d, visits: 0, appointments: 0, revenue: 0, rent: rentDefault, sterilization: sterDefault, net: 0, future: d > today, overridden: false };
+      row = { date: d, visits: 0, appointments: 0, revenue: 0, rent: rentDefault, sterilization: sterDefault, consumables: 0, unconfirmed: 0, net: 0, future: d > today, overridden: false };
       days.set(d, row);
     }
     return row;
@@ -50,6 +52,8 @@ export async function earningsByDay(from: Date, to: Date): Promise<DayRow[]> {
     const r = get(toISODate(v.date));
     r.visits++;
     r.revenue += v.cost;
+    r.consumables += v.consumablesCost ?? 0;
+    if (v.procedureId && !v.consumablesConfirmed) r.unconfirmed++;
   }
   for (const a of aps) get(toISODate(a.startsAt)).appointments++;
   for (const o of overrides) {
@@ -60,7 +64,7 @@ export async function earningsByDay(from: Date, to: Date): Promise<DayRow[]> {
       r.overridden = true;
     }
   }
-  for (const r of days.values()) r.net = r.revenue - r.rent - r.sterilization;
+  for (const r of days.values()) r.net = r.revenue - r.rent - r.sterilization - r.consumables;
   return [...days.values()].sort((a, b) => a.date.localeCompare(b.date));
 }
 
@@ -71,7 +75,7 @@ export async function todayEarnings() {
 }
 
 export type DayDetail = {
-  paid: { patientId: string; name: string; what: string; amount: number }[];
+  paid: { patientId: string; name: string; what: string; amount: number; visitId?: string; consumables?: number | null; confirmed?: boolean }[];
   open: { patientId: string; name: string; what: string; amount: number }[]; // записи без завершения
   missed: { patientId: string; name: string }[]; // не пришли / отменены
 };
@@ -97,7 +101,7 @@ export async function earningsDetails(from: Date, to: Date): Promise<Record<stri
   for (const v of visits) {
     const d = toISODate(v.date);
     if (!workDays.has(d)) continue;
-    get(d).paid.push({ patientId: v.patient.id, name: name(v.patient), what: v.workDone || v.reason || "Приём", amount: v.cost });
+    get(d).paid.push({ patientId: v.patient.id, name: name(v.patient), what: v.workDone || v.reason || "Приём", amount: v.cost, visitId: v.id, consumables: v.consumablesCost, confirmed: v.consumablesConfirmed || !v.procedureId });
   }
   for (const a of aps) {
     const d = toISODate(a.startsAt);

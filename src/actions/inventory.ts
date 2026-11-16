@@ -31,6 +31,7 @@ function readItem(fd: FormData) {
     comment: optStr(fd, "comment", 2000),
     countable: fd.get("countable") === "on",
     level: fd.get("countable") === "on" ? null : oneOf(fd, "level", ["PLENTY", "ENOUGH", "LOW", "OUT"] as const, "ENOUGH"),
+    trackPerVisit: fd.get("trackPerVisit") === "on",
   };
 }
 
@@ -162,5 +163,21 @@ export async function autoCategorize() {
 export async function clearInventory() {
   await requireUser();
   await prisma.inventoryItem.updateMany({ where: { archivedAt: null }, data: { archivedAt: new Date(), toBuyQuantity: null } });
+  refresh();
+}
+
+/** «Открыла новую упаковку»: целых упаковок −1, открытая — «много» */
+export async function openNewPackage(id: string) {
+  await requireUser();
+  const item = await prisma.inventoryItem.findUniqueOrThrow({ where: { id } });
+  await prisma.inventoryItem.update({ where: { id }, data: { quantity: Math.max(0, item.quantity - 1), openLevel: "PLENTY" } });
+  refresh();
+}
+
+/** Сколько осталось в открытой упаковке: много / есть / мало / нет */
+export async function setOpenLevel(id: string, formData: FormData) {
+  await requireUser();
+  const level = oneOf(formData, "level", ["PLENTY", "ENOUGH", "LOW", "OUT"] as const, "ENOUGH");
+  await prisma.inventoryItem.update({ where: { id }, data: { openLevel: level } });
   refresh();
 }

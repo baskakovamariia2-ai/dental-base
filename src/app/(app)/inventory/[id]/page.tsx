@@ -5,8 +5,9 @@ import { requireUser } from "@/lib/auth";
 import { fmtDate, fmtQty, money } from "@/lib/format";
 import { toISODate } from "@/lib/dates";
 import { INVENTORY_CATEGORY_ALL, STOCK_LEVEL, findOpt } from "@/lib/labels";
-import { adjustQuantity, recordPurchase, setLevel, setToBuy } from "@/actions/inventory";
+import { adjustQuantity, openNewPackage, recordPurchase, setLevel, setOpenLevel, setToBuy } from "@/actions/inventory";
 import { Empty, PageHeader } from "@/components/ui";
+import { isLowItem } from "@/lib/consumables";
 
 export default async function ItemPage({ params }: { params: Promise<{ id: string }> }) {
   await requireUser();
@@ -16,7 +17,7 @@ export default async function ItemPage({ params }: { params: Promise<{ id: strin
     include: { supplier: true, purchases: { orderBy: { date: "desc" }, include: { supplier: true } } },
   });
   if (!item) notFound();
-  const low = item.countable ? item.quantity <= item.minQuantity : item.level === "LOW" || item.level === "OUT";
+  const low = isLowItem(item);
   const price = item.currentPrice ?? item.lastPurchasePrice;
 
   return (
@@ -51,6 +52,24 @@ export default async function ItemPage({ params }: { params: Promise<{ id: strin
             <form action={adjustQuantity.bind(null, id)}><input type="hidden" name="delta" value="1" /><button className="h-12 w-12 rounded-xl bg-zinc-100 text-xl">+</button></form>
           </div>
         </div>
+        {!item.trackPerVisit && (
+          <div className="mt-4 border-t border-zinc-100 pt-4">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="text-sm text-ink-soft">Открытая упаковка</span>
+              <form action={openNewPackage.bind(null, id)}><button className="btn-secondary btn-sm">Открыла новую</button></form>
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              {STOCK_LEVEL.map((l) => (
+                <form key={l.value} action={setOpenLevel.bind(null, id)}>
+                  <input type="hidden" name="level" value={l.value} />
+                  <button className={`h-11 w-full rounded-xl text-sm font-medium ring-1 ring-inset ${item.openLevel === l.value ? l.cls : "bg-white text-ink-mute ring-zinc-200"}`}>{l.label}</button>
+                </form>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-ink-mute">Остаток выше — целые упаковки. Начали новую — нажмите «Открыла новую».</p>
+          </div>
+        )}
+        {item.trackPerVisit && <p className="mt-3 text-xs text-ink-mute">Списывается само после каждого приёма — по тому, что вы подтвердили.</p>}
         <form action={adjustQuantity.bind(null, id)} className="mt-4 flex items-center gap-2 border-t border-zinc-100 pt-4">
           <input name="exact" inputMode="decimal" placeholder="Точное количество" className="input flex-1" />
           <button className="btn-secondary">Установить</button>
