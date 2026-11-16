@@ -42,10 +42,11 @@ export async function earningsByDay(from: Date, to: Date): Promise<DayRow[]> {
     }
     return row;
   };
-  // лечение, отмеченное «Завершено» в плане, считается только в день, когда пациент был на приёме
-  const apDays = new Set(aps.map((a) => `${a.patientId}|${toISODate(a.startsAt)}`));
+  // Деньги зарабатываются только в рабочие дни (когда есть записи в расписании).
+  // «Завершено» в плане — это отметка для плана и истории, в заработок не идёт.
+  const workDays = new Set(aps.map((a) => toISODate(a.startsAt)));
   for (const v of visits) {
-    if (v.source === "plan" && !apDays.has(`${v.patientId}|${toISODate(v.date)}`)) continue;
+    if (v.source === "plan" || !workDays.has(toISODate(v.date))) continue;
     const r = get(toISODate(v.date));
     r.visits++;
     r.revenue += v.cost;
