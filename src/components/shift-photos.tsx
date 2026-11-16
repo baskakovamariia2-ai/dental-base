@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { compressImage } from "@/lib/compress-image";
 import { photoTakenAt } from "@/lib/exif-date";
 
-const targetLabel = (t: string | undefined) => (!t ? "" : t === "UPPER" ? "все сверху" : t === "LOWER" ? "все снизу" : `зуб ${t}`);
-const validTarget = (t: string | undefined) => !!t && (t === "UPPER" || t === "LOWER" || /^[1-4][1-8]$/.test(t));
+const targetLabel = (t: string | undefined) => (!t ? "" : t === "UPPER" ? "все сверху" : t === "LOWER" ? "все снизу" : t === "SMILE" ? "улыбка" : `зуб ${t}`);
+const validTarget = (t: string | undefined) => !!t && (t === "UPPER" || t === "LOWER" || t === "SMILE" || /^[1-4][1-8]$/.test(t));
 
 export type ShiftAp = { id: string; patientId: string; name: string; start: string; end: string; toothNumber: number | null };
 type Photo = { key: string; file: File; url: string; thumb: string; time: Date | null; ap: string; skip: boolean; pTarget?: string };
@@ -116,7 +116,7 @@ export function ShiftPhotos({ aps }: { aps: ShiftAp[] }) {
         fd.append("appointmentId", a.id);
         const tg = effTarget(p);
         if (/^[1-4][1-8]$/.test(tg)) fd.append("toothNumber", tg);
-        else if (tg === "UPPER" || tg === "LOWER") fd.append("jaw", tg);
+        else if (tg === "UPPER" || tg === "LOWER" || tg === "SMILE") fd.append("jaw", tg);
         if (p.time) fd.append("takenAt", p.time.toISOString());
         const res = await fetch(`/api/patients/${a.patientId}/files`, { method: "POST", body: fd });
         if (!res.ok) throw new Error();
@@ -272,7 +272,7 @@ function Review({
 
 /** Что на фото: зуб (номер), все зубы сверху, все зубы снизу */
 function TargetPicker({ value, onChange, light = false }: { value: string; onChange: (v: string) => void; light?: boolean }) {
-  const isTooth = value !== "UPPER" && value !== "LOWER";
+  const isTooth = value !== "UPPER" && value !== "LOWER" && value !== "SMILE";
   const chip = (on: boolean) =>
     light
       ? `rounded-full px-2.5 py-1 text-xs ${on ? "bg-accent-soft font-medium text-accent-ink" : "bg-white text-ink-soft"}`
@@ -289,6 +289,7 @@ function TargetPicker({ value, onChange, light = false }: { value: string; onCha
       />
       <button type="button" onClick={() => onChange(value === "UPPER" ? "" : "UPPER")} className={chip(value === "UPPER")}>Все сверху</button>
       <button type="button" onClick={() => onChange(value === "LOWER" ? "" : "LOWER")} className={chip(value === "LOWER")}>Все снизу</button>
+      <button type="button" onClick={() => onChange(value === "SMILE" ? "" : "SMILE")} className={chip(value === "SMILE")}>Улыбка</button>
     </div>
   );
 }

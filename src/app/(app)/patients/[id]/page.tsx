@@ -428,7 +428,7 @@ export default async function PatientPage({
           </section>
 
           <section>
-            <h2 className="section-title">Все зубы · сверху и снизу</h2>
+            <h2 className="section-title">Все зубы и улыбка</h2>
             <div className="card divide-y divide-zinc-100">
               {PHOTO_JAWS.map((j) => (
                 <PhotoRow key={j.value} title={j.label} patientId={patient.id} photos={photos.filter((f) => f.jaw === j.value)} />

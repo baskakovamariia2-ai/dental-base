@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { compressImage } from "@/lib/compress-image";
 import { PHOTO_JAWS } from "@/lib/photos";
 
-type Target = "TOOTH" | "UPPER" | "LOWER" | "GENERAL";
+type Target = "TOOTH" | "UPPER" | "LOWER" | "SMILE" | "GENERAL";
 
 /**
  * Загрузка фото: что на фото — конкретный зуб или все зубы сверху / снизу.
@@ -46,7 +46,7 @@ export function PhotoUploader({
       toSend.forEach((f) => fd.append("files", f));
       fd.append("category", "PHOTO");
       if (target === "TOOTH") fd.append("toothNumber", tooth);
-      if (target === "UPPER" || target === "LOWER") fd.append("jaw", target);
+      if (target === "UPPER" || target === "LOWER" || target === "SMILE") fd.append("jaw", target);
       if (appointmentId) fd.append("appointmentId", appointmentId);
       const res = await fetch(`/api/patients/${patientId}/files`, { method: "POST", body: fd });
       if (!res.ok) throw new Error();

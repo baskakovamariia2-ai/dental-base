@@ -26,7 +26,7 @@ async function editPhoto(patientId: string, id: string, formData: FormData) {
   const n = Number(formData.get("toothNumber"));
   const toothNumber = isValidTooth(n) ? n : null;
   const jawRaw = String(formData.get("jaw") ?? "");
-  const jaw = !toothNumber && ["UPPER", "LOWER"].includes(jawRaw) ? jawRaw : null;
+  const jaw = !toothNumber && ["UPPER", "LOWER", "SMILE"].includes(jawRaw) ? jawRaw : null;
   const comment = String(formData.get("comment") ?? "").slice(0, 1000) || null;
   await prisma.patientFile.update({
     where: { id },
@@ -87,7 +87,7 @@ export default async function PhotoPage({ params }: { params: Promise<{ id: stri
         <form action={editPhoto.bind(null, id, f.id)} className="grid grid-cols-2 gap-2 px-4 pb-4">
           <label className="col-span-2 block"><span className="label">Зуб</span><input name="toothNumber" inputMode="numeric" defaultValue={f.toothNumber ?? ""} placeholder="например 47" className="input" /></label>
           <label className="col-span-2 block">
-            <span className="label">Или все зубы (если зуб не указан)</span>
+            <span className="label">Или все зубы / улыбка (если зуб не указан)</span>
             <select name="jaw" defaultValue={f.jaw ?? ""} className="input">
               <option value="">—</option>
               {PHOTO_JAWS.map((j) => <option key={j.value} value={j.value}>{j.label}</option>)}

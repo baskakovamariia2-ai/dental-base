@@ -8,6 +8,7 @@ export type PhotoStage = (typeof PHOTO_STAGES)[number]["value"];
 export const PHOTO_JAWS = [
   { value: "UPPER", label: "Все зубы сверху" },
   { value: "LOWER", label: "Все зубы снизу" },
+  { value: "SMILE", label: "Улыбка полностью" },
 ] as const;
 
 export const stageLabel = (s: string | null | undefined) => PHOTO_STAGES.find((x) => x.value === s)?.label ?? null;

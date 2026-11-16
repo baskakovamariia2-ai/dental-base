@@ -26,7 +26,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const stageRaw = String(fd.get("stage") ?? "");
   const stage = ["BEFORE", "DURING", "AFTER"].includes(stageRaw) ? stageRaw : null;
   const jawRaw = String(fd.get("jaw") ?? "");
-  const jaw = !toothNumber && ["UPPER", "LOWER"].includes(jawRaw) ? jawRaw : null;
+  const jaw = !toothNumber && ["UPPER", "LOWER", "SMILE"].includes(jawRaw) ? jawRaw : null;
   const apRaw = String(fd.get("appointmentId") ?? "");
   const appointmentId = apRaw ? (await prisma.appointment.findFirst({ where: { id: apRaw, patientId: id }, select: { id: true } }))?.id ?? null : null;
   const takenRaw = new Date(String(fd.get("takenAt") ?? ""));
