@@ -5,6 +5,7 @@ import { archiveItem, updateItem } from "@/actions/inventory";
 import { ConfirmButton } from "@/components/auto-submit";
 import { ErrorNote, PageHeader } from "@/components/ui";
 import { ItemForm } from "../../item-form";
+import { inventoryRowHref } from "@/lib/consumables";
 
 export default async function EditItemPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string }> }) {
   await requireUser();
@@ -17,11 +18,11 @@ export default async function EditItemPage({ params, searchParams }: { params: P
   if (!item) notFound();
   return (
     <div>
-      <PageHeader title="Редактирование" subtitle={item.name} back={`/inventory/${id}`} />
+      <PageHeader title="Редактирование" subtitle={item.name} back={inventoryRowHref(item)} />
       <ErrorNote show={!!error}>Укажите название</ErrorNote>
       <ItemForm action={updateItem.bind(null, id)} item={item} suppliers={suppliers} submitLabel="Сохранить" />
       <form action={archiveItem.bind(null, id)} className="mt-8">
-        <ConfirmButton message="Убрать из инвентаря? История закупок сохранится.">Убрать из инвентаря</ConfirmButton>
+        <ConfirmButton message="Убрать со склада? Если этого у вас нет или оно не ваше — убирайте. История закупок сохранится.">Убрать со склада</ConfirmButton>
       </form>
     </div>
   );

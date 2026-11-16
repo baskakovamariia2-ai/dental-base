@@ -88,3 +88,8 @@ export function isLowItem(i: StockLike) {
   if (i.openLevel) return i.quantity <= i.minQuantity && (i.openLevel === "LOW" || i.openLevel === "OUT");
   return i.quantity <= i.minQuantity;
 }
+
+/** Ссылка обратно в список склада — сразу к нужной строке */
+export function inventoryRowHref(item: { id: string; category: string }) {
+  return `/inventory${item.category === "INSTRUMENTS" ? "?tab=tools" : ""}#item-${item.id}`;
+}

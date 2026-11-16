@@ -7,7 +7,7 @@ import { toISODate } from "@/lib/dates";
 import { INVENTORY_CATEGORY_ALL, STOCK_LEVEL, findOpt } from "@/lib/labels";
 import { adjustQuantity, openNewPackage, recordPurchase, setLevel, setOpenLevel, setToBuy } from "@/actions/inventory";
 import { Empty, PageHeader } from "@/components/ui";
-import { isLowItem } from "@/lib/consumables";
+import { inventoryRowHref, isLowItem } from "@/lib/consumables";
 
 export default async function ItemPage({ params }: { params: Promise<{ id: string }> }) {
   await requireUser();
@@ -22,7 +22,7 @@ export default async function ItemPage({ params }: { params: Promise<{ id: strin
 
   return (
     <div className="space-y-4">
-      <PageHeader title={item.name} subtitle={findOpt(INVENTORY_CATEGORY_ALL, item.category).label} back="/inventory" action={<Link href={`/inventory/${id}/edit`} className="btn-secondary">Изменить</Link>} />
+      <PageHeader title={item.name} subtitle={findOpt(INVENTORY_CATEGORY_ALL, item.category).label} back={inventoryRowHref(item)} action={<Link href={`/inventory/${id}/edit`} className="btn-secondary">Изменить</Link>} />
 
       {!item.countable && (
         <div className="card card-pad">

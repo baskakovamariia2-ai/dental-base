@@ -126,7 +126,7 @@ export default async function InventoryPage({
                   const left = visitsLeft(i.quantity, perVisit.get(i.id) ?? 0);
                   const isLow = isLowItem(i);
                   return (
-                    <div key={i.id} className="flex items-center gap-3 px-4 py-3">
+                    <div key={i.id} id={`item-${i.id}`} className="flex scroll-mt-24 items-center gap-3 px-4 py-3">
                       <Link href={`/inventory/${i.id}`} className="min-w-0 flex-1">
                         <div className="truncate text-[15px] font-medium">{i.name}</div>
                         <div className="truncate text-xs text-ink-mute">
@@ -163,7 +163,7 @@ export default async function InventoryPage({
           ) : (
             <div className="card divide-y divide-zinc-100">
               {tools.map((i) => (
-                <div key={i.id} className="flex items-center gap-3 px-4 py-3">
+                <div key={i.id} id={`item-${i.id}`} className="flex scroll-mt-24 items-center gap-3 px-4 py-3">
                   <Link href={`/inventory/${i.id}`} className="min-w-0 flex-1">
                     <div className="truncate text-[15px] font-medium">{i.name}</div>
                     {i.comment && <div className="truncate text-xs text-ink-mute">{i.comment}</div>}
@@ -287,7 +287,7 @@ function PackageRow({ item: i }: { item: Item }) {
   const low = isLowItem(i);
   if (!i.countable) {
     return (
-      <div className="space-y-2 px-4 py-3">
+      <div id={`item-${i.id}`} className="scroll-mt-24 space-y-2 px-4 py-3">
         <Link href={`/inventory/${i.id}`} className="flex items-center gap-2">
           {low && <span className="h-2 w-2 shrink-0 rounded-full bg-amber-400" />}
           <span className="truncate text-[15px] font-medium">{i.name}</span>

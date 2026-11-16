@@ -53,9 +53,9 @@ export async function updateItem(id: string, formData: FormData) {
   await requireUser();
   const data = readItem(formData);
   if (!data.name) redirect(`/inventory/${id}/edit?error=name`);
-  await prisma.inventoryItem.update({ where: { id }, data: { ...data, supplierId: await supplierIdFrom(formData) } });
+  const saved = await prisma.inventoryItem.update({ where: { id }, data: { ...data, supplierId: await supplierIdFrom(formData) } });
   refresh();
-  redirect(`/inventory/${id}`);
+  redirect(`/inventory${saved.category === "INSTRUMENTS" ? "?tab=tools" : ""}#item-${id}`);
 }
 
 /** +1 / −1 / установить точное количество */
