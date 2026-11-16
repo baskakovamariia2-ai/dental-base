@@ -12,6 +12,7 @@ import { getExportKey } from "@/lib/export-key";
 import { ConfirmButton } from "@/components/auto-submit";
 import { adjustQuantity, recordPurchase, setLevel, setToBuy } from "@/actions/inventory";
 import { isLowItem, loadProcedures, visitsLeft } from "@/lib/consumables";
+import { applyInventoryFixes } from "@/lib/inventory-fixes";
 import { Empty, PageHeader } from "@/components/ui";
 import { IconPlus, IconSearch } from "@/components/icons";
 
@@ -31,6 +32,7 @@ export default async function InventoryPage({
   searchParams: Promise<{ tab?: string; cat?: string; q?: string }>;
 }) {
   await requireUser();
+  await applyInventoryFixes();
   const { tab: tabRaw = "cons", cat = "", q = "" } = await searchParams;
   const tab = tabRaw === "all" || tabRaw === "low" ? "cons" : tabRaw;
 
