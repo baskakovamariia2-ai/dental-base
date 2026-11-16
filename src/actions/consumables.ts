@@ -130,10 +130,13 @@ type SeedItem = {
   minQuantity: number;
 };
 
+const asText = (v: unknown) => (v == null || v === "" ? null : String(v));
+const asPrice = (v: unknown) => (v == null || v === "" || !Number.isFinite(Number(v)) ? null : Math.round(Number(v)));
+
 /** Цена из описи — запасная, если строка не связана со складом */
 function seedPrice(key: string): number | null {
   const r = (clinicInventory as SeedItem[]).find((x) => x.key === key);
-  return r?.price ?? null;
+  return asPrice(r?.price);
 }
 
 async function seedProcedures(keyToId: Map<string, string>) {
@@ -171,19 +174,19 @@ export async function loadClinicInventory() {
     if (!id) {
       const created = await prisma.inventoryItem.create({
         data: {
-          name: r.name.slice(0, 200),
+          name: String(r.name).slice(0, 200),
           category: r.category as never,
-          quantity: r.quantity,
-          unit: r.unit,
-          countable: r.countable,
+          quantity: Number(r.quantity) || 0,
+          unit: String(r.unit ?? "шт."),
+          countable: r.countable !== false,
           level: (r.level as never) ?? null,
           openLevel: (r.openLevel as never) ?? null,
-          currentPrice: r.price,
-          lastPurchasePrice: r.price,
-          url: r.url,
-          comment: r.comment,
-          trackPerVisit: r.trackPerVisit,
-          minQuantity: r.minQuantity,
+          currentPrice: asPrice(r.price),
+          lastPurchasePrice: asPrice(r.price),
+          url: asText(r.url),
+          comment: asText(r.comment),
+          trackPerVisit: r.trackPerVisit === true,
+          minQuantity: Number(r.minQuantity) || 0,
         },
       });
       id = created.id;
