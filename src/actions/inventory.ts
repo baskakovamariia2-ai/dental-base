@@ -148,10 +148,10 @@ export async function importInventory(payload: string) {
   refresh();
 }
 
-/** Разложить все позиции по категориям автоматически (по названию) */
+/** Разложить по категориям автоматически (по названию) — только то, что лежит в «Другом» */
 export async function autoCategorize() {
   await requireUser();
-  const items = await prisma.inventoryItem.findMany({ where: { archivedAt: null } });
+  const items = await prisma.inventoryItem.findMany({ where: { archivedAt: null, category: "OTHER" } });
   for (const i of items) {
     const category = guessCategory(i.name);
     if (category !== i.category) await prisma.inventoryItem.update({ where: { id: i.id }, data: { category } });

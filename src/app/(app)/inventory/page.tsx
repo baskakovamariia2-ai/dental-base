@@ -253,7 +253,7 @@ export default async function InventoryPage({
         </form>
         <div className="flex flex-wrap gap-2">
           <form action={autoCategorize}>
-            <button className="btn-secondary">✨ Разложить по категориям</button>
+            <button className="btn-secondary">✨ Разложить «Другое» по категориям</button>
           </form>
           <form action={clearInventory}>
             <ConfirmButton message="Удалить ВЕСЬ склад? Все позиции пропадут из списка (история закупок сохранится в базе).">Удалить весь склад</ConfirmButton>
