@@ -97,7 +97,6 @@ export default async function PatientPage({
   const photos = patient.files.filter((f) => f.storageKey && f.category !== "CT" && (f.mimeType?.startsWith("image/") ?? false));
   const docs = patient.files.filter((f) => f.storageKey && f.category !== "CT" && !(f.mimeType?.startsWith("image/") ?? false));
   const links = patient.files.filter((f) => !f.storageKey && f.url);
-  const photoCount = (n: number) => photos.filter((f) => f.toothNumber === n).length;
   const photoTeeth = [...new Set(photos.map((f) => f.toothNumber).filter((n): n is number => n !== null))].sort((a: number, b: number) => a - b);
   const otherPhotos = photos.filter((f) => f.toothNumber === null && !f.jaw);
 
@@ -273,14 +272,7 @@ export default async function PatientPage({
                         {v.items.map((i) => (
                     <div key={i.id} className={`px-4 py-3 ${i.status === "CANCELLED" ? "opacity-50" : ""}`}>
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 md:grid md:grid-cols-[56px_1fr_110px_170px_40px]">
-                        {i.toothNumber ? (
-                          <Link href={`/patients/${patient.id}?tab=treatment&tooth=${i.toothNumber}`} className="text-[15px] font-semibold tabular-nums text-accent-ink underline decoration-dotted underline-offset-4">
-                            {i.toothNumber}
-                            {photoCount(i.toothNumber) > 0 && <span className="ml-1 text-xs font-normal no-underline">📷{photoCount(i.toothNumber)}</span>}
-                          </Link>
-                        ) : (
-                          <span className="text-[15px] font-semibold tabular-nums">—</span>
-                        )}
+                        <span className="text-[15px] font-semibold tabular-nums">{i.toothNumber ?? "—"}</span>
                         <span className="min-w-0 flex-1 text-[15px] md:flex-none">
                           {i.treatment}
     

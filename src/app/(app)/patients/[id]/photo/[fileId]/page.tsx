@@ -104,7 +104,7 @@ export default async function PhotoPage({ params }: { params: Promise<{ id: stri
           </label>
           <label className="col-span-2 block"><span className="label">Комментарий</span><input name="comment" defaultValue={f.comment ?? ""} className="input" /></label>
           <button className="btn-primary col-span-2">Сохранить</button>
-          <p className="col-span-2 text-xs text-ink-mute">Фото с номером зуба появится в «Файлах» в строке зуба, в карточке зуба на вкладке «Лечение» и в плане (📷 рядом с номером зуба).</p>
+          <p className="col-span-2 text-xs text-ink-mute">Фото с номером зуба появится в «Файлах» в строке зуба, и в карточке зуба на вкладке «Лечение».</p>
         </form>
       </details>
 
