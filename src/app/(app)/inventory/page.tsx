@@ -6,7 +6,9 @@ import { fmtQty, money } from "@/lib/format";
 import { toISODate } from "@/lib/dates";
 import { INVENTORY_CATEGORY, INVENTORY_CATEGORY_ALL, STOCK_LEVEL, categoryGroup, findOpt } from "@/lib/labels";
 import { autoCategorize, clearInventory, openNewPackage, setOpenLevel } from "@/actions/inventory";
-import { loadClinicInventory } from "@/actions/consumables";
+import { loadClinicInventory, resetExportKey } from "@/actions/consumables";
+import { headers } from "next/headers";
+import { getExportKey } from "@/lib/export-key";
 import { ConfirmButton } from "@/components/auto-submit";
 import { adjustQuantity, recordPurchase, setLevel, setToBuy } from "@/actions/inventory";
 import { isLowItem, loadProcedures, visitsLeft } from "@/lib/consumables";
@@ -29,6 +31,10 @@ export default async function InventoryPage({
   if (cat && INVENTORY_CATEGORY.some((c) => c.value === cat)) where.category = { in: categoryGroup(cat) };
   if (tab === "buy") where.toBuyQuantity = { not: null };
 
+  const h = await headers();
+  const origin = `${h.get("x-forwarded-proto") ?? "https"}://${h.get("x-forwarded-host") ?? h.get("host") ?? ""}`;
+  const exportKey = await getExportKey();
+  const sheetFormula = (kind: string) => `=IMPORTDATA("${origin}/api/export/${kind}?key=${exportKey}"; ","; "en_US")`;
   const [all, everything, procs] = await Promise.all([
     prisma.inventoryItem.findMany({ where, orderBy: [{ category: "asc" }, { name: "asc" }], include: { supplier: true } }),
     prisma.inventoryItem.findMany({ where: { archivedAt: null }, orderBy: { name: "asc" } }),
@@ -218,7 +224,28 @@ export default async function InventoryPage({
         </>
       )}
 
-      <div className="mt-8 space-y-3 border-t border-zinc-200 pt-6">
+      <details className="card mt-8">
+        <summary className="cursor-pointer list-none px-4 py-3.5 text-[15px] font-medium">📊 Связь с Google Таблицей</summary>
+        <div className="space-y-3 px-4 pb-4 text-sm">
+          <p className="text-ink-soft">Создайте в Google Таблице новый лист, нажмите на ячейку A1 и вставьте формулу. Таблица будет сама подтягивать данные из базы (обновляется примерно раз в час). Менять данные — только здесь, в базе.</p>
+          {[
+            { kind: "inventory", label: "Склад" },
+            { kind: "procedures", label: "Себестоимость процедур" },
+            { kind: "visits", label: "Приёмы и расходники (3 месяца, с именами пациентов)" },
+          ].map((f) => (
+            <label key={f.kind} className="block">
+              <span className="label">{f.label}</span>
+              <textarea readOnly rows={3} defaultValue={sheetFormula(f.kind)} className="input font-mono text-xs" />
+            </label>
+          ))}
+          <p className="text-xs text-ink-mute">В формуле секретный ключ — не пересылайте её чужим. Если формула попала не туда, смените ключ: старые формулы перестанут работать, вставьте новые.</p>
+          <form action={resetExportKey}>
+            <ConfirmButton className="btn-ghost btn-sm" message="Сменить ключ? Формулы, которые уже вставлены в таблицу, перестанут работать.">Сменить ключ</ConfirmButton>
+          </form>
+        </div>
+      </details>
+
+      <div className="mt-6 space-y-3 border-t border-zinc-200 pt-6">
         <form action={loadClinicInventory}>
           <ConfirmButton className="btn-secondary" message="Загрузить опись клиники Ильи из таблицы (ноябрь 2026)? Текущий склад уйдёт в архив, процедуры для себестоимости создадутся заново.">
             📋 Загрузить опись клиники из таблицы

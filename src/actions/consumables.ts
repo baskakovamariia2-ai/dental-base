@@ -8,6 +8,7 @@ import { num, optInt, optStr, safeReturn, str } from "@/lib/forms";
 import { isTracked, lineCost, loadProcedures } from "@/lib/consumables";
 import { PROCEDURE_SEED } from "@/lib/procedure-seed";
 import clinicInventory from "@/data/clinic-inventory.json";
+import { resetExportKeyValue } from "@/lib/export-key";
 
 function refresh() {
   revalidatePath("/", "layout");
@@ -199,4 +200,11 @@ export async function seedDefaultProcedures() {
   }
   refresh();
   redirect("/procedures");
+}
+
+/** Сменить ключ ссылок для Google Таблицы (старые формулы перестанут работать) */
+export async function resetExportKey() {
+  await requireUser();
+  await resetExportKeyValue();
+  refresh();
 }
