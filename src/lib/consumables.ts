@@ -1,5 +1,7 @@
 import type { InventoryItem, Procedure, ProcedureItem } from "@prisma/client";
 import { prisma } from "./db";
+import { PROCEDURE_SEED } from "./procedure-seed";
+import clinicInventory from "@/data/clinic-inventory.json";
 
 export type LineWithItem = ProcedureItem & { item: InventoryItem | null };
 export type ProcedureFull = Procedure & { items: LineWithItem[] };
@@ -38,11 +40,46 @@ export function procedureCost(p: ProcedureFull, overrides?: Map<string, number>)
   return { tracked, materials, total: Math.round(tracked + materials) };
 }
 
-export async function loadProcedures(): Promise<ProcedureFull[]> {
+async function fetchProcedures(): Promise<ProcedureFull[]> {
   return prisma.procedure.findMany({
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
     include: { items: { orderBy: [{ sortOrder: "asc" }, { name: "asc" }], include: { item: true } } },
   });
+}
+
+export async function loadProcedures(): Promise<ProcedureFull[]> {
+  const procs = await fetchProcedures();
+  return (await repairProcedureLines(procs)) ? fetchProcedures() : procs;
+}
+
+/**
+ * Строки стандартных процедур без цены (позиция не нашлась на складе) или связанные
+ * с позицией, убранной в архив: связываем с позицией склада из описи или ставим цену из описи.
+ */
+async function repairProcedureLines(procs: ProcedureFull[]): Promise<boolean> {
+  const broken = procs.flatMap((p) => p.items).filter((l) => l.qty > 0 && (lineCost(l) === 0 || l.item?.archivedAt));
+  if (broken.length === 0) return false;
+  const nameToKey = new Map<string, string>();
+  for (const p of PROCEDURE_SEED) for (const l of p.lines) nameToKey.set(l.name, l.key);
+  const rows = clinicInventory as { key: string | null; name: string; price: number | null }[];
+  const active = await prisma.inventoryItem.findMany({ where: { archivedAt: null }, select: { id: true, name: true } });
+  const norm = (n: string) => n.trim().toLowerCase();
+  let changed = false;
+  for (const l of broken) {
+    const key = nameToKey.get(l.name);
+    const row = key ? rows.find((r) => r.key === key) : undefined;
+    if (!row) continue;
+    const found = active.find((i) => norm(i.name) === norm(row.name));
+    const data: { itemId?: string | null; price?: number | null } = {};
+    if (found && found.id !== l.itemId) data.itemId = found.id;
+    else if (l.item?.archivedAt) data.itemId = null;
+    if (l.price == null && row.price != null) data.price = row.price;
+    if (Object.keys(data).length) {
+      await prisma.procedureItem.update({ where: { id: l.id }, data });
+      changed = true;
+    }
+  }
+  return changed;
 }
 
 /** Подобрать процедуру по названию услуги в записи */
