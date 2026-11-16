@@ -69,3 +69,40 @@ export async function todayEarnings() {
   const [row] = await earningsByDay(today, addDays(today, 1));
   return row ?? null;
 }
+
+export type DayDetail = {
+  paid: { patientId: string; name: string; what: string; amount: number }[];
+  open: { patientId: string; name: string; what: string; amount: number }[]; // записи без завершения
+  missed: { patientId: string; name: string }[]; // не пришли / отменены
+};
+
+/** Кто был в рабочий день и сколько заплатил — для раскрытия дня в «Заработке» */
+export async function earningsDetails(from: Date, to: Date): Promise<Record<string, DayDetail>> {
+  const [visits, aps] = await Promise.all([
+    prisma.visit.findMany({
+      where: { date: { gte: from, lt: to }, OR: [{ source: null }, { source: { not: "plan" } }] },
+      include: { patient: { select: { id: true, lastName: true, firstName: true } } },
+      orderBy: { date: "asc" },
+    }),
+    prisma.appointment.findMany({
+      where: { startsAt: { gte: from, lt: to } },
+      include: { patient: { select: { id: true, lastName: true, firstName: true } } },
+      orderBy: { startsAt: "asc" },
+    }),
+  ]);
+  const out: Record<string, DayDetail> = {};
+  const get = (d: string) => (out[d] ??= { paid: [], open: [], missed: [] });
+  const name = (p: { lastName: string; firstName: string }) => `${p.lastName} ${p.firstName}`;
+  const workDays = new Set(aps.filter((a) => !["CANCELLED", "NO_SHOW"].includes(a.status)).map((a) => toISODate(a.startsAt)));
+  for (const v of visits) {
+    const d = toISODate(v.date);
+    if (!workDays.has(d)) continue;
+    get(d).paid.push({ patientId: v.patient.id, name: name(v.patient), what: v.workDone || v.reason || "Приём", amount: v.cost });
+  }
+  for (const a of aps) {
+    const d = toISODate(a.startsAt);
+    if (["CANCELLED", "NO_SHOW"].includes(a.status)) get(d).missed.push({ patientId: a.patient.id, name: name(a.patient) });
+    else if (a.status !== "DONE") get(d).open.push({ patientId: a.patient.id, name: name(a.patient), what: a.procedure, amount: a.price ?? 0 });
+  }
+  return out;
+}

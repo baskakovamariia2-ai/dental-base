@@ -2,7 +2,8 @@ import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { addMonths, parseISODate, startOfMonth, toISODate } from "@/lib/dates";
 import { money } from "@/lib/format";
-import { earningsByDay } from "@/lib/earnings";
+import type { DayDetail } from "@/lib/earnings";
+import { earningsByDay, earningsDetails } from "@/lib/earnings";
 import { getSettings } from "@/lib/settings";
 import { saveDayExpense } from "@/actions/earnings";
 import { saveSettings } from "@/actions/settings";
@@ -14,7 +15,7 @@ export default async function EarningsPage({ searchParams }: { searchParams: Pro
   const { month } = await searchParams;
   const m = startOfMonth(parseISODate(month ? `${month}-01` : null) ?? new Date());
   const next = addMonths(m, 1);
-  const [rows, settings] = await Promise.all([earningsByDay(m, next), getSettings()]);
+  const [rows, settings, details] = await Promise.all([earningsByDay(m, next), getSettings(), earningsDetails(m, next)]);
 
   const past = rows.filter((r) => !r.future);
   const future = rows.filter((r) => r.future);
@@ -69,6 +70,8 @@ export default async function EarningsPage({ searchParams }: { searchParams: Pro
                     {r.net > 0 ? "+" : ""}{money(r.net)}
                   </span>
                 </summary>
+                <DayPatients d={details[r.date]} />
+                <div className="px-4 pb-1 text-xs font-medium uppercase tracking-wide text-ink-mute">Расходы дня</div>
                 <form action={saveDayExpense.bind(null, r.date)} className="grid grid-cols-2 gap-2 px-4 pb-4 sm:grid-cols-4 sm:items-end">
                   <label className="block"><span className="label">Аренда</span><input name="rent" inputMode="numeric" defaultValue={r.rent} className="input" /></label>
                   <label className="block"><span className="label">Стерилизация</span><input name="sterilization" inputMode="numeric" defaultValue={r.sterilization} className="input" /></label>
@@ -79,7 +82,7 @@ export default async function EarningsPage({ searchParams }: { searchParams: Pro
             ))}
           </div>
         )}
-        <p className="mt-2 px-1 text-xs text-ink-mute">Нажмите на день, чтобы изменить аренду или стерилизацию именно в этот день.</p>
+        <p className="mt-2 px-1 text-xs text-ink-mute">Нажмите на день — увидите пациентов и кто сколько заплатил, там же можно изменить аренду или стерилизацию за этот день.</p>
       </section>
 
       <section>
@@ -91,6 +94,50 @@ export default async function EarningsPage({ searchParams }: { searchParams: Pro
           <button className="btn-secondary col-span-2 sm:col-span-1">Сохранить</button>
         </form>
       </section>
+    </div>
+  );
+}
+
+function DayPatients({ d }: { d?: DayDetail }) {
+  if (!d || (!d.paid.length && !d.open.length && !d.missed.length)) return null;
+  const total = d.paid.reduce((s, p) => s + p.amount, 0);
+  return (
+    <div className="px-4 pb-3">
+      <div className="mb-1 text-xs font-medium uppercase tracking-wide text-ink-mute">
+        Пациенты · {new Set(d.paid.map((p) => p.patientId)).size}
+      </div>
+      <div className="divide-y divide-zinc-100 rounded-xl bg-zinc-50">
+        {d.paid.map((p, i) => (
+          <Link key={`p${i}`} href={`/patients/${p.patientId}?tab=history`} className="flex items-start gap-3 px-3 py-2">
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[15px] font-medium">{p.name}</span>
+              <span className="block truncate text-xs text-ink-mute">{p.what}</span>
+            </span>
+            <span className="shrink-0 font-semibold tabular-nums">{money(p.amount)}</span>
+          </Link>
+        ))}
+        {d.open.map((p, i) => (
+          <Link key={`o${i}`} href={`/patients/${p.patientId}`} className="flex items-start gap-3 px-3 py-2">
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[15px] font-medium">{p.name}</span>
+              <span className="block truncate text-xs text-amber-700">{p.what} · смена не завершена</span>
+            </span>
+            <span className="shrink-0 tabular-nums text-ink-mute">{money(p.amount)}</span>
+          </Link>
+        ))}
+        {d.missed.map((p, i) => (
+          <Link key={`m${i}`} href={`/patients/${p.patientId}`} className="flex items-center gap-3 px-3 py-2 text-ink-mute">
+            <span className="min-w-0 flex-1 truncate line-through">{p.name}</span>
+            <span className="shrink-0 text-xs">не пришёл</span>
+          </Link>
+        ))}
+        {d.paid.length > 0 && (
+          <div className="flex justify-between px-3 py-2 text-sm">
+            <span className="text-ink-soft">Заплатили всего</span>
+            <span className="font-semibold tabular-nums">{money(total)}</span>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
