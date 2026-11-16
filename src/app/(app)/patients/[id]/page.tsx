@@ -6,7 +6,7 @@ import { patientStats, buildToothInfo, ALL_TEETH, isValidTooth } from "@/lib/tee
 import { syncPhotoTeeth } from "@/lib/photo-sync";
 import { OcclusalChart } from "@/components/occlusal-chart";
 import { getReminderTemplate, reminderText } from "@/lib/reminder";
-import { PHOTO_JAWS, PHOTO_STAGES, photoCaption } from "@/lib/photos";
+import { PHOTO_JAWS, photoCaption } from "@/lib/photos";
 import { applyCrownRules, applyEndoRules, fillMissingPrices, moveItemNotesToTeeth, recordDoneItems } from "@/lib/plan";
 import { getSettings } from "@/lib/settings";
 import { buildStages } from "@/lib/stages";
@@ -564,25 +564,21 @@ function Thumb({ patientId, f, size = "grid" }: { patientId: string; f: PhotoFil
   );
 }
 
-/** Строка «Зуб 36» / «Все зубы сверху»: до / в процессе / после */
+/** Строка «Зуб 36» / «Все зубы сверху»: все фото подряд, по дате */
 function PhotoRow({ title, patientId, photos }: { title: string; patientId: string; photos: PhotoFile[] }) {
-  const groups = [...PHOTO_STAGES.map((s) => ({ label: s.label, items: photos.filter((f) => f.stage === s.value) })), { label: "Без этапа", items: photos.filter((f) => !f.stage) }];
+  const sorted = [...photos].sort((a, b) => a.date.getTime() - b.date.getTime());
   return (
     <div className="px-4 py-3">
-      <div className="mb-2 text-[15px] font-semibold">{title}</div>
+      <div className="mb-2 text-[15px] font-semibold">
+        {title}
+        {photos.length > 0 && <span className="ml-1 font-normal text-ink-mute">· {photos.length}</span>}
+      </div>
       {photos.length === 0 ? (
         <div className="text-sm text-ink-mute">Фото пока нет</div>
       ) : (
-        <div className="space-y-2">
-          {groups.filter((g) => g.items.length).map((g) => (
-            <div key={g.label}>
-              <div className="mb-1 text-xs font-medium uppercase tracking-wide text-ink-mute">{g.label} · {g.items.length}</div>
-              <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-                {g.items.map((f) => (
-                  <Thumb key={f.id} patientId={patientId} f={f} size="strip" />
-                ))}
-              </div>
-            </div>
+        <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+          {sorted.map((f) => (
+            <Thumb key={f.id} patientId={patientId} f={f} size="strip" />
           ))}
         </div>
       )}

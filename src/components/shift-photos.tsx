@@ -4,14 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { compressImage } from "@/lib/compress-image";
 import { photoTakenAt } from "@/lib/exif-date";
-import { PHOTO_STAGES, stageLabel } from "@/lib/photos";
 
 const targetLabel = (t: string | undefined) => (!t ? "" : t === "UPPER" ? "все сверху" : t === "LOWER" ? "все снизу" : `зуб ${t}`);
 const validTarget = (t: string | undefined) => !!t && (t === "UPPER" || t === "LOWER" || /^[1-4][1-8]$/.test(t));
 
 export type ShiftAp = { id: string; patientId: string; name: string; start: string; end: string; toothNumber: number | null };
-type Photo = { key: string; file: File; url: string; thumb: string; time: Date | null; ap: string; skip: boolean; pStage?: string; pTarget?: string };
-// pStage / pTarget — подпись именно этого фото (если не задана — берётся общая для пациента). Target: номер зуба, "UPPER", "LOWER" или "" (без зуба) // ap: id записи или "" — не распознано
+type Photo = { key: string; file: File; url: string; thumb: string; time: Date | null; ap: string; skip: boolean; pTarget?: string };
+// pTarget — подпись именно этого фото (если не задана — берётся общая для пациента). Target: номер зуба, "UPPER", "LOWER" или "" (без зуба) // ap: id записи или "" — не распознано
 
 const hhmm = (d: Date) => d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
 const hhmmss = (d: Date) => d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
@@ -61,7 +60,6 @@ function guess(time: Date | null, aps: ShiftAp[]): string {
 export function ShiftPhotos({ aps }: { aps: ShiftAp[] }) {
   const router = useRouter();
   const [photos, setPhotos] = useState<Photo[]>([]);
-  const [stage, setStage] = useState<Record<string, string>>({});
   const [tooth, setTooth] = useState<Record<string, string>>(() => Object.fromEntries(aps.map((a) => [a.id, a.toothNumber ? String(a.toothNumber) : ""])));
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -88,9 +86,8 @@ export function ShiftPhotos({ aps }: { aps: ShiftAp[] }) {
 
   const move = (key: string, ap: string) =>
     setPhotos((p) => p.map((x) => (x.key === key ? (ap === "skip" ? { ...x, skip: true } : { ...x, ap, skip: false }) : x)));
-  const effStage = (p: Photo) => p.pStage ?? stage[p.ap] ?? "";
   const effTarget = (p: Photo) => p.pTarget ?? tooth[p.ap] ?? "";
-  const label = (p: Photo) => [validTarget(effTarget(p)) ? targetLabel(effTarget(p)) : "", stageLabel(effStage(p)) ?? ""].filter(Boolean).join(" · ");
+  const label = (p: Photo) => (validTarget(effTarget(p)) ? targetLabel(effTarget(p)) : "");
   const setPhoto = (key: string, patch: Partial<Photo>) => setPhotos((list) => list.map((x) => (x.key === key ? { ...x, ...patch } : x)));
   const toggleSkip = (key: string) => setPhotos((p) => p.map((x) => (x.key === key ? { ...x, skip: !x.skip } : x)));
   const setSkipAt = (i: number, skip: boolean) => {
@@ -117,9 +114,7 @@ export function ShiftPhotos({ aps }: { aps: ShiftAp[] }) {
         fd.append("files", f);
         fd.append("category", "PHOTO");
         fd.append("appointmentId", a.id);
-        const st = effStage(p);
         const tg = effTarget(p);
-        if (st) fd.append("stage", st);
         if (/^[1-4][1-8]$/.test(tg)) fd.append("toothNumber", tg);
         else if (tg === "UPPER" || tg === "LOWER") fd.append("jaw", tg);
         if (p.time) fd.append("takenAt", p.time.toISOString());
@@ -166,16 +161,6 @@ export function ShiftPhotos({ aps }: { aps: ShiftAp[] }) {
               </div>
               {g.ap && g.items.length > 0 && (
                 <div className="mb-2 flex flex-wrap items-center gap-1.5">
-                  {PHOTO_STAGES.map((s) => (
-                    <button
-                      key={s.value}
-                      type="button"
-                      onClick={() => setStage((st) => ({ ...st, [g.id]: st[g.id] === s.value ? "" : s.value }))}
-                      className={`rounded-full px-2.5 py-1 text-xs ${stage[g.id] === s.value ? "bg-accent-soft font-medium text-accent-ink" : "bg-white text-ink-soft"}`}
-                    >
-                      {s.label}
-                    </button>
-                  ))}
                   <TargetPicker value={tooth[g.id] ?? ""} onChange={(v) => setTooth((t) => ({ ...t, [g.id]: v }))} light />
                 </div>
               )}
@@ -228,9 +213,7 @@ export function ShiftPhotos({ aps }: { aps: ShiftAp[] }) {
           onSkip={() => setSkipAt(review, true)}
           onPrev={() => setReview(Math.max(0, review - 1))}
           onMove={(ap) => move(photos[review].key, ap)}
-          stage={effStage(photos[review])}
           target={effTarget(photos[review])}
-          onStage={(v) => setPhoto(photos[review].key, { pStage: v })}
           onTarget={(v) => setPhoto(photos[review].key, { pTarget: v })}
           onClose={() => setReview(null)}
         />
@@ -241,11 +224,11 @@ export function ShiftPhotos({ aps }: { aps: ShiftAp[] }) {
 
 /** Крупный просмотр: по одному фото, большие кнопки «Убрать» / «Оставить» */
 function Review({
-  photo, index, total, aps, onKeep, onSkip, onPrev, onMove, onClose, stage, target, onStage, onTarget,
+  photo, index, total, aps, onKeep, onSkip, onPrev, onMove, onClose, target, onTarget,
 }: {
   photo: Photo; index: number; total: number; aps: ShiftAp[];
   onKeep: () => void; onSkip: () => void; onPrev: () => void; onMove: (ap: string) => void; onClose: () => void;
-  stage: string; target: string; onStage: (v: string) => void; onTarget: (v: string) => void;
+  target: string; onTarget: (v: string) => void;
 }) {
   const [full, setFull] = useState<string>("");
   useEffect(() => {
@@ -274,13 +257,6 @@ function Review({
         {photo.skip && <span className="absolute rounded-full bg-rose-600 px-3 py-1 text-sm">убрано</span>}
       </div>
       <div className="space-y-2 px-3 pt-2">
-        <div className="flex flex-wrap justify-center gap-1.5">
-          {PHOTO_STAGES.map((st) => (
-            <button key={st.value} type="button" onClick={() => onStage(stage === st.value ? "" : st.value)} className={`rounded-full px-3 py-1.5 text-sm ${stage === st.value ? "bg-white font-medium text-black" : "bg-white/15"}`}>
-              {st.label}
-            </button>
-          ))}
-        </div>
         <div className="flex justify-center">
           <TargetPicker value={target} onChange={onTarget} />
         </div>

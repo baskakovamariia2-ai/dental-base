@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { fmtDate } from "@/lib/format";
-import { PHOTO_JAWS, PHOTO_STAGES, photoCaption } from "@/lib/photos";
+import { PHOTO_JAWS, photoCaption } from "@/lib/photos";
 import { isValidTooth } from "@/lib/teeth";
 import { removeFile } from "@/lib/storage";
 import { revalidatePath } from "next/cache";
@@ -25,14 +25,12 @@ async function editPhoto(patientId: string, id: string, formData: FormData) {
   await requireUser();
   const n = Number(formData.get("toothNumber"));
   const toothNumber = isValidTooth(n) ? n : null;
-  const stageRaw = String(formData.get("stage") ?? "");
-  const stage = ["BEFORE", "DURING", "AFTER"].includes(stageRaw) ? stageRaw : null;
   const jawRaw = String(formData.get("jaw") ?? "");
   const jaw = !toothNumber && ["UPPER", "LOWER"].includes(jawRaw) ? jawRaw : null;
   const comment = String(formData.get("comment") ?? "").slice(0, 1000) || null;
   await prisma.patientFile.update({
     where: { id },
-    data: { toothNumber, stage, jaw, comment, photoTag: photoCaption({ toothNumber, stage, jaw, photoTag: null }) },
+    data: { toothNumber, jaw, comment, photoTag: photoCaption({ toothNumber, jaw, photoTag: null }) },
   });
   revalidatePath(`/patients/${patientId}`);
   revalidatePath(`/patients/${patientId}/photo/${id}`);
@@ -85,16 +83,9 @@ export default async function PhotoPage({ params }: { params: Promise<{ id: stri
       </div>
 
       <details className="card">
-        <summary className="cursor-pointer list-none px-4 py-3 text-[15px] font-medium">✏️ Подписать фото: зуб, этап</summary>
+        <summary className="cursor-pointer list-none px-4 py-3 text-[15px] font-medium">✏️ Подписать фото: какой зуб</summary>
         <form action={editPhoto.bind(null, id, f.id)} className="grid grid-cols-2 gap-2 px-4 pb-4">
-          <label className="block"><span className="label">Зуб</span><input name="toothNumber" inputMode="numeric" defaultValue={f.toothNumber ?? ""} placeholder="например 47" className="input" /></label>
-          <label className="block">
-            <span className="label">Этап</span>
-            <select name="stage" defaultValue={f.stage ?? ""} className="input">
-              <option value="">—</option>
-              {PHOTO_STAGES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-            </select>
-          </label>
+          <label className="col-span-2 block"><span className="label">Зуб</span><input name="toothNumber" inputMode="numeric" defaultValue={f.toothNumber ?? ""} placeholder="например 47" className="input" /></label>
           <label className="col-span-2 block">
             <span className="label">Или все зубы (если зуб не указан)</span>
             <select name="jaw" defaultValue={f.jaw ?? ""} className="input">

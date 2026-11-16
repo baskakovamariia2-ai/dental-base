@@ -13,9 +13,7 @@ export const PHOTO_JAWS = [
 export const stageLabel = (s: string | null | undefined) => PHOTO_STAGES.find((x) => x.value === s)?.label ?? null;
 export const jawLabel = (s: string | null | undefined) => PHOTO_JAWS.find((x) => x.value === s)?.label ?? null;
 
-/** Подпись фото: «Зуб 36 · До», «Все зубы сверху · После» */
-export function photoCaption(f: { toothNumber: number | null; stage: string | null; jaw: string | null; photoTag: string | null }) {
-  const where = f.toothNumber ? `Зуб ${f.toothNumber}` : jawLabel(f.jaw);
-  const parts = [where, stageLabel(f.stage)].filter(Boolean);
-  return parts.length ? parts.join(" · ") : f.photoTag;
+/** Подпись фото: «Зуб 36», «Все зубы сверху» (этапы до / после больше не используются) */
+export function photoCaption(f: { toothNumber: number | null; stage?: string | null; jaw: string | null; photoTag: string | null }) {
+  return (f.toothNumber ? `Зуб ${f.toothNumber}` : jawLabel(f.jaw)) ?? f.photoTag;
 }

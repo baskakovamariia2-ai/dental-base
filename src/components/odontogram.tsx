@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { PhotoUploader } from "./photo-uploader";
-import { stageLabel } from "@/lib/photos";
 
 import { useState, useEffect } from "react";
 import type { ToothStatus, TreatmentStatus } from "@prisma/client";
@@ -259,7 +258,6 @@ function ToothSheet({
                 <Link key={f.id} href={`/patients/${patientId}/photo/${f.id}`} className="relative block h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-zinc-100">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={`/api/files/${f.id}`} alt="" loading="lazy" className="h-20 w-20 object-cover" />
-                  {stageLabel(f.stage) && <span className="absolute inset-x-0 bottom-0 bg-black/50 py-0.5 text-center text-[10px] text-white">{stageLabel(f.stage)}</span>}
                 </Link>
               ))}
             </div>

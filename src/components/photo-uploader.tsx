@@ -3,12 +3,12 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { compressImage } from "@/lib/compress-image";
-import { PHOTO_JAWS, PHOTO_STAGES } from "@/lib/photos";
+import { PHOTO_JAWS } from "@/lib/photos";
 
 type Target = "TOOTH" | "UPPER" | "LOWER" | "GENERAL";
 
 /**
- * Загрузка фото: этап (до / в процессе / после) и что на фото — конкретный зуб или все зубы сверху / снизу.
+ * Загрузка фото: что на фото — конкретный зуб или все зубы сверху / снизу.
  * fixedTooth — внутри карточки зуба: зуб уже выбран.
  */
 export function PhotoUploader({
@@ -26,7 +26,6 @@ export function PhotoUploader({
 }) {
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
-  const [stage, setStage] = useState<string>("BEFORE");
   const [target, setTarget] = useState<Target>(fixedTooth || defaultTooth ? "TOOTH" : "GENERAL");
   const [tooth, setTooth] = useState(String(fixedTooth ?? defaultTooth ?? ""));
   const [files, setFiles] = useState<File[]>([]);
@@ -46,7 +45,6 @@ export function PhotoUploader({
       const fd = new FormData();
       toSend.forEach((f) => fd.append("files", f));
       fd.append("category", "PHOTO");
-      fd.append("stage", stage);
       if (target === "TOOTH") fd.append("toothNumber", tooth);
       if (target === "UPPER" || target === "LOWER") fd.append("jaw", target);
       if (appointmentId) fd.append("appointmentId", appointmentId);
@@ -68,13 +66,6 @@ export function PhotoUploader({
 
   return (
     <div className={compact ? "space-y-2" : "space-y-3"}>
-      <div className="flex flex-wrap gap-1.5">
-        {PHOTO_STAGES.map((s) => (
-          <button key={s.value} type="button" onClick={() => setStage(s.value)} className={chip(stage === s.value)}>
-            {s.label}
-          </button>
-        ))}
-      </div>
       {!fixedTooth && (
         <div className="flex flex-wrap items-center gap-1.5">
           <button type="button" onClick={() => setTarget("TOOTH")} className={chip(target === "TOOTH")}>Зуб</button>
