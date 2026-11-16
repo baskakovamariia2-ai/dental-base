@@ -47,7 +47,27 @@ async function fetchProcedures(): Promise<ProcedureFull[]> {
   });
 }
 
+/**
+ * Разовые правки уже созданных процедур (16.11.2026, со слов Маши):
+ * в эндо ручных файлов уходит 5 (№10 + 4 из №15–40), композита — в два раза больше,
+ * ВиоПаста — кальций между посещениями. Меняем, только если строку ещё не правили руками.
+ */
+async function applyProcedureFixes() {
+  const FLAG = "procedureFix-2026-11-16";
+  if (await prisma.setting.findUnique({ where: { key: FLAG } })) return;
+  const endo = await prisma.procedure.findFirst({ where: { name: "Эндо" }, include: { items: true } });
+  if (endo) {
+    for (const l of endo.items) {
+      if (l.name === "K-файлы MANI №15–40" && l.qty === 2) await prisma.procedureItem.update({ where: { id: l.id }, data: { qty: 4 } });
+      if (l.name === "Композит Эстелайт" && l.qty === 1) await prisma.procedureItem.update({ where: { id: l.id }, data: { qty: 2 } });
+      if (l.name === "ВиоПаста") await prisma.procedureItem.update({ where: { id: l.id }, data: { name: "ВиоПаста (кальций между посещениями)" } });
+    }
+  }
+  await prisma.setting.upsert({ where: { key: FLAG }, create: { key: FLAG, value: "1" }, update: { value: "1" } });
+}
+
 export async function loadProcedures(): Promise<ProcedureFull[]> {
+  await applyProcedureFixes();
   const procs = await fetchProcedures();
   return (await repairProcedureLines(procs)) ? fetchProcedures() : procs;
 }
