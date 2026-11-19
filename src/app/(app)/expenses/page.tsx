@@ -6,6 +6,7 @@ import { fmtDate, money } from "@/lib/format";
 import { EXPENSE_CATEGORY, expenseCategoryLabel } from "@/lib/expenses";
 import { addExpense, deleteExpense } from "@/actions/expenses";
 import { ConfirmButton } from "@/components/auto-submit";
+import { LinkPurchase } from "@/components/link-purchase";
 import { Empty, PageHeader, Stat } from "@/components/ui";
 import { IconBack, IconChevron } from "@/components/icons";
 
@@ -81,6 +82,11 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
           ))}
         </div>
       )}
+
+      <details className="card">
+        <summary className="cursor-pointer list-none px-4 py-3.5 text-[15px] font-medium">🛒 Покупка по ссылке (Озон и др.)</summary>
+        <LinkPurchase today={today} />
+      </details>
 
       <details className="card" open={rows.length === 0}>
         <summary className="cursor-pointer list-none px-4 py-3.5 text-[15px] font-medium">+ Добавить трату</summary>
