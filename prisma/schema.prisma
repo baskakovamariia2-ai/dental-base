@@ -495,3 +495,17 @@ model Expense {
 
   @@index([date])
 }
+
+// ───────────── Загруженные УПД — чтобы один документ не внести дважды ─────────────
+
+model UpdImport {
+  id        String   @id @default(cuid())
+  number    String
+  date      DateTime
+  seller    String   @default("")
+  total     Int      @default(0)
+  rows      Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@unique([number, seller])
+}

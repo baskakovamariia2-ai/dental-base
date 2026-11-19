@@ -128,7 +128,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
             })}
           </div>
         )}
-        <p className="mt-2 px-1 text-xs text-ink-mute">Покупки на склад (кнопка «Закупка» у позиции склада) появляются здесь сами. Чтобы удалить такую покупку — откройте позицию склада.</p>
+        <p className="mt-2 px-1 text-xs text-ink-mute">Покупки на склад появляются здесь сами — и из «Отметить как купленное», и из загруженных УПД (Склад → 📄 УПД). Чтобы удалить такую покупку — откройте позицию склада.</p>
       </section>
     </div>
   );

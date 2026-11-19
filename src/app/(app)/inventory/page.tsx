@@ -77,6 +77,7 @@ export default async function InventoryPage({
         title="Склад"
         action={
           <div className="flex gap-2">
+            <Link href="/inventory/upd" className="btn-secondary">📄 <span className="hidden sm:inline">УПД</span></Link>
             <Link href="/procedures" className="btn-secondary">₽ <span className="hidden sm:inline">Себестоимость</span></Link>
             <Link href="/inventory/new" className="btn-accent"><IconPlus /> <span className="hidden sm:inline">Добавить</span></Link>
           </div>
