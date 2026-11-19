@@ -481,3 +481,17 @@ model DayExpense {
   note          String?
   updatedAt     DateTime @updatedAt
 }
+
+// ───────────── Траты (вложения) — покупки вне склада ─────────────
+
+model Expense {
+  id        String   @id @default(cuid())
+  date      DateTime
+  title     String
+  amount    Int // ₽
+  category  String   @default("OTHER") // MATERIALS | INSTRUMENTS | EQUIPMENT | OTHER
+  comment   String?
+  createdAt DateTime @default(now())
+
+  @@index([date])
+}

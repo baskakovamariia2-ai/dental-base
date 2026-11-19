@@ -8,6 +8,7 @@ import { isValidTooth } from "@/lib/teeth";
 import { removeFile } from "@/lib/storage";
 import { revalidatePath } from "next/cache";
 import { ConfirmButton } from "@/components/auto-submit";
+import { SwipeNav } from "@/components/swipe-nav";
 
 export const dynamic = "force-dynamic";
 
@@ -70,16 +71,21 @@ export default async function PhotoPage({ params }: { params: Promise<{ id: stri
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-2xl bg-black">
+      <SwipeNav
+        prevHref={prev ? `/patients/${id}/photo/${prev}` : null}
+        nextHref={next ? `/patients/${id}/photo/${next}` : null}
+        className="overflow-hidden rounded-2xl bg-black"
+      >
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={`/api/files/${f.id}`} alt={f.title} className="mx-auto max-h-[70dvh] w-auto object-contain" />
-      </div>
+        <img src={`/api/files/${f.id}`} alt={f.title} className="mx-auto max-h-[70dvh] w-auto select-none object-contain" draggable={false} />
+      </SwipeNav>
+      {same.length > 1 && <p className="text-center text-xs text-ink-mute">Листайте фото пальцем влево и вправо</p>}
       {f.comment && <p className="text-sm text-ink-soft">{f.comment}</p>}
 
       <div className="flex items-center gap-2">
-        {prev ? <Link href={`/patients/${id}/photo/${prev}`} className="btn-secondary flex-1">‹ Предыдущее</Link> : <span className="flex-1" />}
+        {prev ? <Link href={`/patients/${id}/photo/${prev}`} replace className="btn-secondary flex-1">‹ Предыдущее</Link> : <span className="flex-1" />}
         {same.length > 1 && <span className="text-sm text-ink-mute">{i + 1} / {same.length}</span>}
-        {next ? <Link href={`/patients/${id}/photo/${next}`} className="btn-secondary flex-1">Следующее ›</Link> : <span className="flex-1" />}
+        {next ? <Link href={`/patients/${id}/photo/${next}`} replace className="btn-secondary flex-1">Следующее ›</Link> : <span className="flex-1" />}
       </div>
 
       <details className="card">

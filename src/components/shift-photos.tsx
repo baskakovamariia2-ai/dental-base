@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { compressImage } from "@/lib/compress-image";
 import { photoTakenAt } from "@/lib/exif-date";
+import { useSwipe } from "./swipe-nav";
 
 const targetLabel = (t: string | undefined) => (!t ? "" : t === "UPPER" ? "все сверху" : t === "LOWER" ? "все снизу" : t === "SMILE" ? "улыбка" : `зуб ${t}`);
 const validTarget = (t: string | undefined) => !!t && (t === "UPPER" || t === "LOWER" || t === "SMILE" || /^[1-4][1-8]$/.test(t));
@@ -212,6 +213,7 @@ export function ShiftPhotos({ aps }: { aps: ShiftAp[] }) {
           onKeep={() => setSkipAt(review, false)}
           onSkip={() => setSkipAt(review, true)}
           onPrev={() => setReview(Math.max(0, review - 1))}
+          onNext={() => setReview(Math.min(photos.length - 1, review + 1))}
           onMove={(ap) => move(photos[review].key, ap)}
           target={effTarget(photos[review])}
           onTarget={(v) => setPhoto(photos[review].key, { pTarget: v })}
@@ -224,13 +226,14 @@ export function ShiftPhotos({ aps }: { aps: ShiftAp[] }) {
 
 /** Крупный просмотр: по одному фото, большие кнопки «Убрать» / «Оставить» */
 function Review({
-  photo, index, total, aps, onKeep, onSkip, onPrev, onMove, onClose, target, onTarget,
+  photo, index, total, aps, onKeep, onSkip, onPrev, onNext, onMove, onClose, target, onTarget,
 }: {
   photo: Photo; index: number; total: number; aps: ShiftAp[];
-  onKeep: () => void; onSkip: () => void; onPrev: () => void; onMove: (ap: string) => void; onClose: () => void;
+  onKeep: () => void; onSkip: () => void; onPrev: () => void; onNext: () => void; onMove: (ap: string) => void; onClose: () => void;
   target: string; onTarget: (v: string) => void;
 }) {
   const [full, setFull] = useState<string>("");
+  const swipe = useSwipe(onNext, onPrev); // влево — следующее, вправо — предыдущее
   useEffect(() => {
     // полноразмерное фото — только одно за раз, старое сразу освобождаем
     const u = URL.createObjectURL(photo.file);
@@ -251,7 +254,7 @@ function Review({
           </select>
         </div>
       </div>
-      <div className="relative flex min-h-0 flex-1 items-center justify-center">
+      <div {...swipe} style={{ touchAction: "pan-y" }} className="relative flex min-h-0 flex-1 items-center justify-center">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={full || photo.thumb} alt="" className={`max-h-full max-w-full object-contain ${photo.skip ? "opacity-40" : ""}`} />
         {photo.skip && <span className="absolute rounded-full bg-rose-600 px-3 py-1 text-sm">убрано</span>}
@@ -261,10 +264,12 @@ function Review({
           <TargetPicker value={target} onChange={onTarget} />
         </div>
       </div>
-      <div className="grid grid-cols-[auto_1fr_1fr] gap-2 p-3">
+      <p className="pt-1 text-center text-[11px] text-white/50">Листайте пальцем влево и вправо</p>
+      <div className="grid grid-cols-[auto_1fr_1fr_auto] gap-2 p-3">
         <button type="button" onClick={onPrev} disabled={index === 0} className="rounded-2xl bg-white/15 px-4 py-4 text-lg disabled:opacity-30">‹</button>
         <button type="button" onClick={onSkip} className="rounded-2xl bg-rose-600 py-4 text-[17px] font-semibold">✕ Убрать</button>
         <button type="button" onClick={onKeep} className="rounded-2xl bg-emerald-600 py-4 text-[17px] font-semibold">✓ Оставить</button>
+        <button type="button" onClick={onNext} disabled={index >= total - 1} className="rounded-2xl bg-white/15 px-4 py-4 text-lg disabled:opacity-30">›</button>
       </div>
     </div>
   );
