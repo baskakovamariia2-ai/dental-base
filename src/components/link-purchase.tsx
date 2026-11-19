@@ -16,7 +16,7 @@ export function parseShared(text: string) {
   return { url, name };
 }
 
-/** Покупка по ссылке (Озон и др.): вставили ссылку, указали цену — запись в «Траты» и, если нужно, на склад */
+/** Покупка по ссылке (Озон и др.): вставили ссылку, указали цену — запись в «Траты» и на склад */
 export function LinkPurchase({ today }: { today: string }) {
   const [shared, setShared] = useState("");
   const [name, setName] = useState("");
@@ -53,10 +53,8 @@ export function LinkPurchase({ today }: { today: string }) {
         <span className="label">Магазин</span>
         <input name="shop" defaultValue={/wildberries|wb\.ru/i.test(url) ? "Wildberries" : /ozon/i.test(url) || !url ? "Озон" : ""} className="input" />
       </label>
-      <label className="col-span-2 flex items-center gap-2 text-sm text-ink-soft">
-        <input type="checkbox" name="toStock" defaultChecked className="h-5 w-5 accent-teal-700" />
-        Это для склада — добавить к остатку (найдётся по названию или будет новая позиция со ссылкой)
-      </label>
+      <input type="hidden" name="toStock" value="on" />
+      <p className="col-span-2 text-xs text-ink-mute">Покупка запишется в «Траты» и на «Склад»: найдётся по названию и прибавится к остатку, а если такого товара нет — появится новая позиция со ссылкой.</p>
       <button className="btn-primary col-span-2">Записать покупку</button>
       {url && <p className="col-span-2 truncate text-xs text-ink-mute">Ссылка: {url}</p>}
     </form>
