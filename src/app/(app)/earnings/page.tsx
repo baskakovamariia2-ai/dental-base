@@ -5,6 +5,7 @@ import { money } from "@/lib/format";
 import type { DayDetail } from "@/lib/earnings";
 import { earningsByDay, earningsDetails } from "@/lib/earnings";
 import { getSettings } from "@/lib/settings";
+import { spendingBetween } from "@/lib/spending";
 import { saveDayExpense } from "@/actions/earnings";
 import { saveSettings } from "@/actions/settings";
 import { Empty, PageHeader, Stat } from "@/components/ui";
@@ -15,7 +16,7 @@ export default async function EarningsPage({ searchParams }: { searchParams: Pro
   const { month } = await searchParams;
   const m = startOfMonth(parseISODate(month ? `${month}-01` : null) ?? new Date());
   const next = addMonths(m, 1);
-  const [rows, settings, details] = await Promise.all([earningsByDay(m, next), getSettings(), earningsDetails(m, next)]);
+  const [rows, settings, details, spent] = await Promise.all([earningsByDay(m, next), getSettings(), earningsDetails(m, next), spendingBetween(m, next)]);
 
   const past = rows.filter((r) => !r.future);
   const future = rows.filter((r) => r.future);
@@ -23,6 +24,8 @@ export default async function EarningsPage({ searchParams }: { searchParams: Pro
   const expenses = past.reduce((s, r) => s + r.rent + r.sterilization, 0);
   const consumables = past.reduce((s, r) => s + r.consumables, 0);
   const unconfirmed = past.reduce((s, r) => s + r.unconfirmed, 0);
+  const net = revenue - expenses - consumables; // заработок за смены, без закупок
+  const netWithPurchases = revenue - expenses - spent; // расходники уже входят в покупки — второй раз не вычитаем
   const futureExpenses = future.reduce((s, r) => s + r.rent + r.sterilization, 0);
   const monthKey = (d: Date) => toISODate(d).slice(0, 7);
   const title = m.toLocaleDateString("ru-RU", { month: "long", year: "numeric" });
@@ -46,9 +49,36 @@ export default async function EarningsPage({ searchParams }: { searchParams: Pro
         <Stat label="Выручка" value={money(revenue)} />
         <Stat label="Аренда + стерилизация" value={money(expenses)} hint={`рабочих дней: ${past.length}`} />
         <Stat label="Расходники" value={money(consumables)} hint={unconfirmed ? `не подтверждено: ${unconfirmed}` : "анестезия, оптрагейт, материалы"} />
-        <Stat label="Чистыми" value={<span className={revenue - expenses - consumables < 0 ? "text-rose-600" : "text-emerald-700"}>{money(revenue - expenses - consumables)}</span>} />
+        <Stat label="Чистыми за смены" value={<span className={net < 0 ? "text-rose-600" : "text-emerald-700"}>{money(net)}</span>} />
         <Stat label="Предстоит расходов" value={money(futureExpenses)} hint={`запланировано дней: ${future.length}`} />
       </div>
+
+      <section>
+        <h2 className="section-title">Итог месяца</h2>
+        <div className="card divide-y divide-zinc-100">
+          <div className="flex items-start gap-3 px-4 py-3">
+            <span className="min-w-0 flex-1">
+              <span className="block text-[15px] font-medium">Заработали за смены</span>
+              <span className="block text-xs text-ink-mute">выручка − аренда и стерилизация − расходники на приёмы. Сколько заработали, если не считать закупки.</span>
+            </span>
+            <span className={`shrink-0 text-lg font-semibold tabular-nums ${net < 0 ? "text-rose-600" : "text-emerald-700"}`}>{money(net)}</span>
+          </div>
+          <Link href={`/expenses?month=${monthKey(m)}`} className="flex items-start gap-3 px-4 py-3 hover:bg-zinc-50">
+            <span className="min-w-0 flex-1">
+              <span className="block text-[15px] font-medium">Покупки за месяц ›</span>
+              <span className="block text-xs text-ink-mute">всё из «Трат»: закупки на склад, УПД, инструменты, оборудование</span>
+            </span>
+            <span className="shrink-0 text-lg font-semibold tabular-nums text-ink-soft">−{money(spent)}</span>
+          </Link>
+          <div className="flex items-start gap-3 px-4 py-3">
+            <span className="min-w-0 flex-1">
+              <span className="block text-[15px] font-medium">Заработали с учётом покупок</span>
+              <span className="block text-xs text-ink-mute">выручка − аренда и стерилизация − покупки за месяц. Расходники второй раз не вычитаются — они уже в покупках.</span>
+            </span>
+            <span className={`shrink-0 text-lg font-semibold tabular-nums ${netWithPurchases < 0 ? "text-rose-600" : "text-emerald-700"}`}>{money(netWithPurchases)}</span>
+          </div>
+        </div>
+      </section>
 
       <section>
         <h2 className="section-title">По дням</h2>
@@ -73,6 +103,14 @@ export default async function EarningsPage({ searchParams }: { searchParams: Pro
                     {r.net > 0 ? "+" : ""}{money(r.net)}
                   </span>
                 </summary>
+                {!r.future && (
+                  <div className="mx-4 mb-3 rounded-xl bg-zinc-50 px-3 py-2 text-sm">
+                    <div className="flex justify-between"><span className="text-ink-soft">Выручка</span><span className="tabular-nums">{money(r.revenue)}</span></div>
+                    <div className="flex justify-between"><span className="text-ink-soft">Аренда + стерилизация</span><span className="tabular-nums">−{money(r.rent + r.sterilization)}</span></div>
+                    {r.consumables > 0 && <div className="flex justify-between"><span className="text-ink-soft">Расходники</span><span className="tabular-nums">−{money(r.consumables)}</span></div>}
+                    <div className="mt-1 flex justify-between border-t border-zinc-200 pt-1 font-semibold"><span>Чистыми за смену</span><span className={`tabular-nums ${r.net < 0 ? "text-rose-600" : "text-emerald-700"}`}>{money(r.net)}</span></div>
+                  </div>
+                )}
                 <DayPatients d={details[r.date]} />
                 <div className="px-4 pb-1 text-xs font-medium uppercase tracking-wide text-ink-mute">Расходы дня</div>
                 <form action={saveDayExpense.bind(null, r.date)} className="grid grid-cols-2 gap-2 px-4 pb-4 sm:grid-cols-4 sm:items-end">
