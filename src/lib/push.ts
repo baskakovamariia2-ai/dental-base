@@ -3,8 +3,10 @@ import { addDays, startOfDay, toISODate } from "./dates";
 
 type Keys = { publicKey: string; privateKey: string };
 
+// web-push загружаем «как есть» из node_modules во время работы, без упаковки сборщиком
 async function webpush() {
-  return (await import("web-push")).default;
+  const m = (await import(/* webpackIgnore: true */ "web-push")) as { default?: unknown };
+  return ((m.default ?? m) as typeof import("web-push").default);
 }
 
 /** Ключи для уведомлений — создаются один раз и хранятся в базе */
