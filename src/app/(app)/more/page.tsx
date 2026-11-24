@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PushToggle } from "@/components/push-toggle";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { logout, changePassword } from "@/actions/auth";
@@ -65,6 +66,11 @@ export default async function MorePage({ searchParams }: { searchParams: Promise
           </Link>
         ))}
       </div>
+
+      <section>
+        <h2 className="section-title">Уведомления</h2>
+        <PushToggle />
+      </section>
 
       {isOwner && (
         <section>

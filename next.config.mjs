@@ -11,7 +11,7 @@ const securityHeaders = [
 const nextConfig = {
   poweredByHeader: false,
   // чтение PDF (УПД) — библиотека работает на сервере как есть, без упаковки
-  serverExternalPackages: ["pdfjs-dist"],
+  serverExternalPackages: ["pdfjs-dist", "web-push"],
   // Типы проверяются отдельно командой `npm run typecheck`, сборку они не блокируют
   typescript: { ignoreBuildErrors: true },
   eslint: { ignoreDuringBuilds: true },
