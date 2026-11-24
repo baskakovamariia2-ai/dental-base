@@ -68,8 +68,16 @@ export function PushToggle() {
 
   const test = async () => {
     setBusy(true);
-    const r = await fetch("/api/push/test", { method: "POST" }).then((x) => x.json()).catch(() => ({ sent: 0 }));
-    setMsg(r.sent ? "Отправлено — через несколько секунд придёт уведомление." : "Не отправилось. Выключите и включите уведомления заново.");
+    const r = await fetch("/api/push/test", { method: "POST" })
+      .then((x) => x.json())
+      .catch(() => ({ sent: 0, total: 0, errors: ["нет связи с сервером"] }));
+    setMsg(
+      r.sent
+        ? "Отправлено — через несколько секунд придёт уведомление."
+        : r.total === 0 && !r.errors?.length
+          ? "Этот телефон не подписан. Нажмите «Выключить», затем «Включить на этом телефоне»."
+          : `Не отправилось. Причина: ${r.errors?.[0] ?? "неизвестно"}. Пришлите это сообщение Claude.`,
+    );
     setBusy(false);
   };
 

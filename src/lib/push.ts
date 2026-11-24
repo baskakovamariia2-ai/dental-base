@@ -29,19 +29,25 @@ export type PushPayload = { title: string; body: string; tag?: string; url?: str
 export async function sendPush(payload: PushPayload, userId?: string) {
   const wp = await webpush();
   const keys = await vapidKeys();
-  wp.setVapidDetails("mailto:noreply@dental-base.local", keys.publicKey, keys.privateKey);
+  // Apple требует настоящий адрес в «sub» — берём почту владельца базы
+  const owner = await prisma.user.findFirst({ where: { isActive: true }, orderBy: { createdAt: "asc" }, select: { email: true } });
+  wp.setVapidDetails(`mailto:${owner?.email ?? "admin@example.com"}`, keys.publicKey, keys.privateKey);
   const subs = await prisma.pushSubscription.findMany({ where: userId ? { userId } : {} });
   let sent = 0;
+  const errors: string[] = [];
   for (const s of subs) {
     try {
       await wp.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, JSON.stringify(payload), { TTL: 6 * 3600, urgency: "high" });
       sent++;
     } catch (e) {
-      const code = (e as { statusCode?: number }).statusCode;
+      const err = e as { statusCode?: number; body?: string; message?: string };
+      const code = err.statusCode;
+      errors.push(`${code ?? "—"} ${(err.body || err.message || "").toString().slice(0, 200)}`);
+      console.error("push send", code, err.body || err.message);
       if (code === 404 || code === 410) await prisma.pushSubscription.delete({ where: { id: s.id } }).catch(() => {});
     }
   }
-  return sent;
+  return { sent, errors, total: subs.length };
 }
 
 const hhmm = (d: Date) => d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Moscow" });

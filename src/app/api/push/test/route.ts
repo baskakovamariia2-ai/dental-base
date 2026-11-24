@@ -18,6 +18,11 @@ export async function POST() {
   const payload = msg
     ? { ...msg, title: `Пробное · ${msg.title.replace("Сегодня", next!.startsAt.toLocaleDateString("ru-RU", { day: "numeric", month: "long", timeZone: "Europe/Moscow" }) + ":")}`, tag: "test" }
     : { title: "🦷 Пробное уведомление", body: "Уведомления работают. Записей на ближайшие дни пока нет.", tag: "test", url: "/schedule" };
-  const sent = await sendPush(payload, user.id);
-  return NextResponse.json({ sent });
+  try {
+    const r = await sendPush(payload, user.id);
+    return NextResponse.json(r);
+  } catch (e) {
+    console.error("push test", e);
+    return NextResponse.json({ sent: 0, total: 0, errors: [`сервер: ${(e as Error).message}`.slice(0, 300)] });
+  }
 }
