@@ -88,10 +88,39 @@ export async function dayScheduleMessage(day: Date): Promise<PushPayload | null>
 }
 
 /**
+ * Накануне приёмов в 15:00 — напоминание «напишите пациентам в Telegram» со списком тех,
+ * кому ещё не напомнили. Нажатие открывает завтрашний день, где у каждого кнопка «Напомнить в Telegram».
+ */
+export async function remindTick() {
+  const now = new Date();
+  if (now.getHours() < 15 || now.getHours() >= 22) return;
+  const tomorrow = addDays(startOfDay(now), 1);
+  const key = `push-remind-${toISODate(tomorrow)}`;
+  if (await prisma.setting.findUnique({ where: { key } })) return;
+  const aps = await prisma.appointment.findMany({
+    where: { startsAt: { gte: tomorrow, lt: addDays(tomorrow, 1) }, status: { notIn: ["CANCELLED", "NO_SHOW"] } },
+    include: { patient: { select: { lastName: true, firstName: true } } },
+    orderBy: { startsAt: "asc" },
+  });
+  const todo = aps.filter((a) => !a.reminderSent);
+  await prisma.setting.create({ data: { key, value: String(todo.length) } }).catch(() => {});
+  if (!todo.length || (await prisma.pushSubscription.count()) === 0) return;
+  const n = todo.length;
+  const word = n % 10 === 1 && n % 100 !== 11 ? "пациенту" : "пациентам";
+  await sendPush({
+    title: `💬 Напомните ${n} ${word} о завтрашнем приёме`,
+    body: todo.map((a) => `${hhmm(a.startsAt)} ${a.patient.lastName} ${a.patient.firstName ? a.patient.firstName[0] + "." : ""}`.trim()).join("\n") + "\nНажмите — откроется завтра, у каждого кнопка «Напомнить в Telegram».",
+    tag: `remind-${toISODate(tomorrow)}`,
+    url: `/schedule?view=day&date=${toISODate(tomorrow)}`,
+  });
+}
+
+/**
  * Раз в минуту: в день приёмов за час до первого пациента присылаем расписание дня (один раз).
  * Если пациентов дописали или перенесли до начала — уведомление обновится (тот же «tag» заменит старое).
  */
 export async function pushTick() {
+  await remindTick().catch((e) => console.error("push remind", e));
   const now = new Date();
   const msg = await dayScheduleMessage(now);
   if (!msg) return;

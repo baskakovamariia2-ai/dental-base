@@ -84,8 +84,12 @@ export function PushToggle() {
   return (
     <div className="card card-pad space-y-3">
       <div>
-        <div className="text-[15px] font-medium">🔔 Расписание дня на телефон</div>
-        <div className="text-sm text-ink-soft">В день приёмов за час до первого пациента придёт уведомление со всеми пациентами по времени. Оно остаётся на экране, пока вы его не смахнёте.</div>
+        <div className="text-[15px] font-medium">🔔 Уведомления на телефон</div>
+        <div className="space-y-1 text-sm text-ink-soft">
+          <p>• Накануне приёма в 15:00 — напоминание написать пациентам в Telegram (кому ещё не напомнили).</p>
+          <p>• В день приёмов за час до первого пациента — расписание дня по времени.</p>
+          <p>Уведомление остаётся на экране, пока вы его не смахнёте.</p>
+        </div>
       </div>
       {state === "loading" && <div className="text-sm text-ink-mute">Проверяю…</div>}
       {state === "not-home" && (
