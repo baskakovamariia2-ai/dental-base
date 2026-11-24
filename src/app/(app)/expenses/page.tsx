@@ -39,7 +39,11 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
       title: p.item.name,
       amount: Math.round(p.quantity * p.price),
       category: "STOCK",
-      note: [`${p.quantity} ${p.item.unit ?? "шт"} × ${money(p.price)}`, p.supplier?.name].filter(Boolean).join(" · "),
+      note: [
+        /^(Заказ|УПД)/.test(p.comment ?? "") ? `📄 ${p.comment}` : /^(Озон|Wildberries)/.test(p.comment ?? "") ? `🛒 ${(p.comment ?? "").split(":")[0]}` : "✍️ вручную",
+        `${p.quantity} ${p.item.unit ?? "шт"} × ${money(p.price)}`,
+        p.supplier?.name,
+      ].filter(Boolean).join(" · "),
       expenseId: null,
       purchaseId: p.id,
       archived: !!p.item.archivedAt,
