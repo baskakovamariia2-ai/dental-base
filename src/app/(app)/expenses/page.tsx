@@ -5,6 +5,7 @@ import { addMonths, parseISODate, startOfMonth, toISODate } from "@/lib/dates";
 import { fmtDate, money } from "@/lib/format";
 import { expenseCategoryLabel } from "@/lib/expenses";
 import { deleteExpense, deletePurchase } from "@/actions/expenses";
+import { cleanupManualPurchasesOnce, cleanupReport } from "@/lib/cleanup";
 import { ConfirmButton } from "@/components/auto-submit";
 import { Empty, PageHeader, Stat } from "@/components/ui";
 import { IconBack, IconChevron } from "@/components/icons";
@@ -16,6 +17,8 @@ type Row = { key: string; date: Date; title: string; amount: number; category: s
 /** Траты по месяцам: покупки на склад + всё, что купили помимо склада. Чтобы видеть, сколько вложено. */
 export default async function ExpensesPage({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
   await requireUser();
+  await cleanupManualPurchasesOnce();
+  const cleaned = await cleanupReport();
   const { month } = await searchParams;
   const m = startOfMonth(parseISODate(month ? `${month}-01` : null) ?? new Date());
   const next = addMonths(m, 1);
@@ -69,6 +72,12 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
         <div className="flex-1 text-center text-[17px] font-semibold capitalize">{title}</div>
         <Link href={`/expenses?month=${monthKey(next)}`} className="btn-secondary h-11 w-11 px-0" aria-label="Следующий месяц"><IconChevron /></Link>
       </div>
+
+      {cleaned && (
+        <div className="card card-pad text-sm text-ink-soft">
+          🧹 Убраны ручные записи от 24.11 и пробное зеркало: {cleaned.count} шт. на {money(cleaned.sum)}. Остатки и цены на складе пересчитаны.
+        </div>
+      )}
 
       <div className="grid grid-cols-3 gap-2.5">
         <Stat label="За месяц" value={money(total)} />
