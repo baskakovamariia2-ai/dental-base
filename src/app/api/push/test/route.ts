@@ -17,7 +17,7 @@ export async function POST(req: Request) {
   });
   const msg = next ? await dayScheduleMessage(next.startsAt) : null;
   const payload = msg
-    ? { ...msg, title: `Пробное · ${msg.title.replace("Сегодня", next!.startsAt.toLocaleDateString("ru-RU", { day: "numeric", month: "long", timeZone: "Europe/Moscow" }) + ":")}`, tag: "test" }
+    ? { ...msg, title: `Пробное · ${next!.startsAt.toLocaleDateString("ru-RU", { day: "numeric", month: "short", timeZone: "Europe/Moscow" })} · ${msg.title.replace("🦷 ", "")}`, tag: "test" }
     : { title: "🦷 Пробное уведомление", body: "Уведомления работают. Записей на ближайшие дни пока нет.", tag: "test", url: "/schedule" };
   try {
     const r = await sendPush(payload, user.id);

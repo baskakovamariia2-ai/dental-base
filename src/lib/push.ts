@@ -59,6 +59,30 @@ export async function sendPush(payload: PushPayload, userId?: string) {
   return { sent, errors, total: subs.length };
 }
 
+/** «37 — Реставрация (кариес)» + зуб 37 → «кариес 37» */
+export function shortWhat(procedure: string | null | undefined, tooth: number | null | undefined) {
+  let p = (procedure ?? "").trim();
+  let t = tooth ? String(tooth) : "";
+  const m = p.match(/^(\d{2})\s*[—–-]\s*/);
+  if (m) { t ||= m[1]; p = p.slice(m[0].length); }
+  const l = p.toLowerCase();
+  let w =
+    /кариес/.test(l) ? "кариес" :
+    /пульпит/.test(l) ? "пульпит" :
+    /периодонтит/.test(l) ? "периодонтит" :
+    /после лечения каналов/.test(l) ? "реставрация" :
+    /консультац|осмотр/.test(l) ? "консультация" :
+    /гигиен|чистк/.test(l) ? "гигиена" :
+    /удален/.test(l) ? "удаление" :
+    /отбел/.test(l) ? "отбеливание" :
+    /коронк/.test(l) ? "коронка" :
+    /вкладк/.test(l) ? "вкладка" :
+    l.replace(/\s*\(.*?\)\s*/g, " ").trim();
+  if (w.length > 20) w = w.slice(0, 19).trimEnd() + "…";
+  if (t) w = w.replace(new RegExp(`\\b(зуб\\s*)?${t}\\b`), "").trim();
+  return w ? [w, t].filter(Boolean).join(" ") : t ? `зуб ${t}` : "";
+}
+
 const hhmm = (d: Date) => d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Moscow" });
 
 /** Текст уведомления: все пациенты дня по времени */
@@ -74,13 +98,10 @@ export async function dayScheduleMessage(day: Date): Promise<PushPayload | null>
   const end = new Date(last.startsAt.getTime() + last.durationMin * 60_000);
   const n = aps.length;
   const word = n % 10 === 1 && n % 100 !== 11 ? "пациент" : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? "пациента" : "пациентов";
-  const lines = aps.map((a) => {
-    const who = `${a.patient.lastName} ${a.patient.firstName ? a.patient.firstName[0] + "." : ""}`.trim();
-    const what = [a.procedure, a.toothNumber ? `зуб ${a.toothNumber}` : ""].filter(Boolean).join(", ");
-    return `${hhmm(a.startsAt)} ${who}${what ? ` — ${what}` : ""}`;
-  });
+  // коротко, чтобы каждый пациент помещался в одну строку на заблокированном экране
+  const lines = aps.map((a) => `${hhmm(a.startsAt)} ${a.patient.lastName} · ${shortWhat(a.procedure, a.toothNumber)}`.replace(/ · $/, ""));
   return {
-    title: `🦷 Сегодня ${n} ${word} · ${hhmm(aps[0].startsAt)}–${hhmm(end)}`,
+    title: `🦷 ${n} ${word} · ${hhmm(aps[0].startsAt)}–${hhmm(end)}`,
     body: lines.join("\n"),
     tag: `day-${toISODate(from)}`,
     url: `/schedule?view=day&date=${toISODate(from)}`,
@@ -109,7 +130,7 @@ export async function remindTick() {
   const word = n % 10 === 1 && n % 100 !== 11 ? "пациенту" : "пациентам";
   await sendPush({
     title: `💬 Напомните ${n} ${word} о завтрашнем приёме`,
-    body: todo.map((a) => `${hhmm(a.startsAt)} ${a.patient.lastName} ${a.patient.firstName ? a.patient.firstName[0] + "." : ""}`.trim()).join("\n") + "\nНажмите — откроется завтра, у каждого кнопка «Напомнить в Telegram».",
+    body: todo.map((a) => `${hhmm(a.startsAt)} ${a.patient.lastName}`).join("\n"),
     tag: `remind-${toISODate(tomorrow)}`,
     url: `/schedule?view=day&date=${toISODate(tomorrow)}`,
   });
