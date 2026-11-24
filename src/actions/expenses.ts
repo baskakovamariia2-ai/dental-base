@@ -77,3 +77,21 @@ export async function addLinkPurchase(formData: FormData) {
   revalidatePath("/inventory");
   redirect(`/inventory/ozon?ok=${encodeURIComponent(title)}`);
 }
+
+/**
+ * Удалить покупку из «Трат» (ошибочная или пробная запись). Если позиция ещё на складе —
+ * её остаток уменьшится на это количество, будто покупки не было.
+ */
+export async function deletePurchase(id: string) {
+  await requireUser();
+  const p = await prisma.purchase.findUnique({ where: { id }, include: { item: true } });
+  if (!p) return;
+  await prisma.$transaction(async (tx) => {
+    await tx.purchase.delete({ where: { id } });
+    if (!p.item.archivedAt) {
+      await tx.inventoryItem.update({ where: { id: p.itemId }, data: { quantity: Math.max(0, p.item.quantity - p.quantity) } });
+    }
+  });
+  revalidatePath("/expenses");
+  revalidatePath("/inventory");
+}

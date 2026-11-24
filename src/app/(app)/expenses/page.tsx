@@ -4,14 +4,14 @@ import { requireUser } from "@/lib/auth";
 import { addMonths, parseISODate, startOfMonth, toISODate } from "@/lib/dates";
 import { fmtDate, money } from "@/lib/format";
 import { expenseCategoryLabel } from "@/lib/expenses";
-import { deleteExpense } from "@/actions/expenses";
+import { deleteExpense, deletePurchase } from "@/actions/expenses";
 import { ConfirmButton } from "@/components/auto-submit";
 import { Empty, PageHeader, Stat } from "@/components/ui";
 import { IconBack, IconChevron } from "@/components/icons";
 
 export const dynamic = "force-dynamic";
 
-type Row = { key: string; date: Date; title: string; amount: number; category: string; note: string | null; expenseId: string | null; href: string | null };
+type Row = { key: string; date: Date; title: string; amount: number; category: string; note: string | null; expenseId: string | null; purchaseId: string | null; archived: boolean; href: string | null };
 
 /** Траты по месяцам: покупки на склад + всё, что купили помимо склада. Чтобы видеть, сколько вложено. */
 export default async function ExpensesPage({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
@@ -32,7 +32,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
   const purSum = (list: { quantity: number; price: number }[]) => list.reduce((s, p) => s + Math.round(p.quantity * p.price), 0);
 
   const rows: Row[] = [
-    ...expenses.map((e) => ({ key: e.id, date: e.date, title: e.title, amount: e.amount, category: e.category, note: e.comment, expenseId: e.id, href: null })),
+    ...expenses.map((e) => ({ key: e.id, date: e.date, title: e.title, amount: e.amount, category: e.category, note: e.comment, expenseId: e.id, purchaseId: null, archived: false, href: null })),
     ...purchases.map((p) => ({
       key: p.id,
       date: p.date,
@@ -41,7 +41,9 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
       category: "STOCK",
       note: [`${p.quantity} ${p.item.unit ?? "шт"} × ${money(p.price)}`, p.supplier?.name].filter(Boolean).join(" · "),
       expenseId: null,
-      href: `/inventory/${p.itemId}`,
+      purchaseId: p.id,
+      archived: !!p.item.archivedAt,
+      href: p.item.archivedAt ? null : `/inventory/${p.itemId}`,
     })),
   ].sort((a, b) => b.date.getTime() - a.date.getTime());
 
@@ -91,7 +93,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
               const body = (
                 <>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[15px] font-medium">{r.title}</span>
+                    <span className="block truncate text-[15px] font-medium">{r.title}{r.archived && <span className="ml-1 text-xs font-normal text-ink-mute">(убрано со склада)</span>}</span>
                     <span className="block truncate text-xs text-ink-mute">{fmtDate(r.date)} · {catLabel(r.category)}{r.note ? ` · ${r.note}` : ""}</span>
                   </span>
                   <span className="shrink-0 font-semibold tabular-nums">{money(r.amount)}</span>
@@ -102,7 +104,17 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
                   {r.href ? <Link href={r.href} className="flex min-w-0 flex-1 items-center gap-3">{body}</Link> : <div className="flex min-w-0 flex-1 items-center gap-3">{body}</div>}
                   {r.expenseId && (
                     <form action={deleteExpense.bind(null, r.expenseId)}>
-                      <ConfirmButton message="Удалить трату?" className="px-1 text-lg text-ink-mute">×</ConfirmButton>
+                      <ConfirmButton message="Удалить трату? Используйте только для ошибочных или пробных записей." className="px-1 text-lg text-ink-mute">×</ConfirmButton>
+                    </form>
+                  )}
+                  {r.purchaseId && (
+                    <form action={deletePurchase.bind(null, r.purchaseId)}>
+                      <ConfirmButton
+                        message={`Удалить «${r.title}» из трат? Только для ошибочных или пробных записей — если товар правда купили, оставьте.${r.archived ? "" : " Остаток на складе уменьшится на это количество."}`}
+                        className="px-1 text-lg text-ink-mute"
+                      >
+                        ×
+                      </ConfirmButton>
                     </form>
                   )}
                 </div>
@@ -110,7 +122,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
             })}
           </div>
         )}
-        <p className="mt-2 px-1 text-xs text-ink-mute">Покупки вносятся на Складе: «📄 Авельдент» (заказ или УПД), «🛒 Озон» (по ссылке, там же — покупки не для склада) или «Отметить как купленное» у позиции. Сюда всё попадает само.</p>
+        <p className="mt-2 px-1 text-xs text-ink-mute">Покупки вносятся на Складе: «📄 Авельдент» (заказ или УПД), «🛒 Озон» (по ссылке, там же — покупки не для склада) или «Отметить как купленное» у позиции. Сюда всё попадает само. Если убрать товар со склада, покупка здесь останется — деньги ведь потрачены. Ошибочную или пробную запись удалите крестиком ×.</p>
       </section>
     </div>
   );

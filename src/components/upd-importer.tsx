@@ -107,16 +107,12 @@ export function UpdImporter() {
                     </div>
                   </div>
                   {r.dup && <div className="text-xs text-amber-700">Похоже, эта покупка уже внесена (такая же позиция и количество в эти дни) — по умолчанию пропускаю.</div>}
-                  <select value={c.target} onChange={(e) => set(r.n, { target: e.target.value, addQty: e.target.value === "new" ? true : c.addQty })} className="input text-sm">
-                    <option value="skip">Пропустить (не записывать)</option>
-                    <option value="new">➕ Новая позиция на складе</option>
-                    {r.matchId && <option value={r.matchId}>✓ {r.matchName}</option>}
-                    <optgroup label="Другая позиция склада">
-                      {preview.items.filter((i) => i.id !== r.matchId).map((i) => (
-                        <option key={i.id} value={i.id}>{i.name}</option>
-                      ))}
-                    </optgroup>
-                  </select>
+                  <TargetChooser
+                    value={c.target}
+                    matchId={r.matchId}
+                    items={preview.items}
+                    onChange={(v) => set(r.n, { target: v, addQty: v === "new" ? true : v === r.matchId ? r.addQty : true })}
+                  />
                   {!skip && c.target !== "new" && (
                     <label className="flex items-center gap-2 text-sm text-ink-soft">
                       <input type="checkbox" checked={c.addQty} onChange={(e) => set(r.n, { addQty: e.target.checked })} className="h-5 w-5 accent-teal-700" />
@@ -136,6 +132,50 @@ export function UpdImporter() {
             <button type="button" onClick={() => setPreview(null)} className="btn-secondary w-full">Отмена</button>
           </div>
         </>
+      )}
+    </div>
+  );
+}
+
+/** Куда записать строку документа: пропустить / новая позиция / позиция склада — с поиском по складу */
+function TargetChooser({ value, matchId, items, onChange }: { value: string; matchId: string | null; items: { id: string; name: string }[]; onChange: (v: string) => void }) {
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState(false);
+  const current = value === "skip" ? "Пропустить (не записывать)" : value === "new" ? "➕ Новая позиция на складе" : `✓ ${items.find((i) => i.id === value)?.name ?? ""}`;
+  const words = q.toLowerCase().replace(/ё/g, "е").split(/\s+/).filter(Boolean);
+  const found = words.length
+    ? items.filter((i) => { const n = i.name.toLowerCase().replace(/ё/g, "е"); return words.every((w) => n.includes(w)); }).slice(0, 30)
+    : [];
+  const pick = (v: string) => { onChange(v); setOpen(false); setQ(""); };
+  const chip = (on: boolean) => `rounded-full px-3 py-1.5 text-sm ${on ? "bg-accent-soft font-medium text-accent-ink" : "bg-zinc-100 text-ink-soft"}`;
+  return (
+    <div className="space-y-2">
+      <button type="button" onClick={() => setOpen(!open)} className="input flex w-full items-center justify-between text-left text-sm">
+        <span className="min-w-0 truncate">{current}</span>
+        <span className="ml-2 shrink-0 text-ink-mute">{open ? "▲" : "изменить ▼"}</span>
+      </button>
+      {open && (
+        <div className="space-y-2 rounded-xl bg-zinc-50 p-2">
+          <div className="flex flex-wrap gap-1.5">
+            {matchId && <button type="button" onClick={() => pick(matchId)} className={chip(value === matchId)}>✓ Как предложила база</button>}
+            <button type="button" onClick={() => pick("new")} className={chip(value === "new")}>➕ Новая позиция</button>
+            <button type="button" onClick={() => pick("skip")} className={chip(value === "skip")}>Пропустить</button>
+          </div>
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="🔍 Найти на складе: например, «матрицы» или «кламп 26»" className="input text-sm" autoFocus />
+          {words.length > 0 && (
+            <div className="max-h-64 divide-y divide-zinc-100 overflow-y-auto rounded-xl bg-white">
+              {found.length === 0 ? (
+                <div className="px-3 py-2 text-sm text-ink-mute">Ничего не нашлось — попробуйте одно слово</div>
+              ) : (
+                found.map((i) => (
+                  <button key={i.id} type="button" onClick={() => pick(i.id)} className={`block w-full px-3 py-2 text-left text-sm ${i.id === value ? "font-medium text-accent-ink" : ""}`}>
+                    {i.name}
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
