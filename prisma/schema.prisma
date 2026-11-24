@@ -456,6 +456,8 @@ model Purchase {
   date       DateTime
   quantity   Float
   price      Int // цена за единицу
+  total      Int? // сколько заплатили всего (точно, без округления цены за штуку)
+  stockAdded Boolean       @default(true) // прибавлялось ли к остатку — при удалении вычитаем только если да
   supplierId String?
   supplier   Supplier?     @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   comment    String?

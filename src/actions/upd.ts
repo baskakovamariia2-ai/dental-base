@@ -6,7 +6,7 @@ import { requireUser } from "@/lib/auth";
 import { guessCategory } from "@/lib/inventory-category";
 import { aveldentSearch, docKey, findImported, sellerName } from "@/lib/upd";
 
-type ImportRow = { n: number; name: string; unit: string; qty: number; price: number; target: string; addQty: boolean }; // target: id позиции | "new" | "skip"
+type ImportRow = { n: number; name: string; unit: string; qty: number; price: number; sum?: number; target: string; addQty: boolean }; // target: id позиции | "new" | "skip"
 type ImportPayload = { kind?: "upd" | "order"; number: string | null; order?: string | null; date: string | null; seller: string | null; total: number | null; rows: ImportRow[] };
 
 /** Записать УПД: покупки (для «Трат»), остатки на складе, новые позиции со ссылкой на поиск */
@@ -53,11 +53,12 @@ export async function importUpd(json: string): Promise<{ ok: boolean; message: s
       }
       const item = await tx.inventoryItem.findUnique({ where: { id: itemId } });
       if (!item) continue;
-      await tx.purchase.create({ data: { itemId, date, quantity: r.qty, price, supplierId: supplier.id, comment: p.number ? (kind === "order" ? `Заказ № ${p.number}` : `УПД № ${p.number}`) : "Документ" } });
+      const stockAdded = r.addQty || r.target === "new";
+      await tx.purchase.create({ data: { itemId, date, quantity: r.qty, price, total: Math.round((r as ImportRow & { sum?: number }).sum ?? r.qty * (r.price || 0)), stockAdded, supplierId: supplier.id, comment: p.number ? (kind === "order" ? `Заказ № ${p.number}` : `УПД № ${p.number}`) : "Документ" } });
       await tx.inventoryItem.update({
         where: { id: itemId },
         data: {
-          ...(r.addQty || r.target === "new" ? { quantity: item.quantity + r.qty, ...(item.countable ? {} : { level: "PLENTY" as const }) } : {}),
+          ...(stockAdded ? { quantity: item.quantity + r.qty, ...(item.countable ? {} : { level: "PLENTY" as const }) } : {}),
           lastPurchaseDate: !item.lastPurchaseDate || item.lastPurchaseDate < date ? date : item.lastPurchaseDate,
           // цену «сейчас» меняем, только если этот документ не старее последней покупки
           ...(!item.lastPurchaseDate || item.lastPurchaseDate <= date ? { lastPurchasePrice: price, currentPrice: price } : {}),
@@ -96,7 +97,7 @@ export async function undoUpdImport(id: string) {
       await tx.inventoryItem.update({
         where: { id: p.itemId },
         data: {
-          quantity: Math.max(0, item.quantity - p.quantity),
+          ...(p.stockAdded ? { quantity: Math.max(0, item.quantity - p.quantity) } : {}),
           ...(last ? { currentPrice: last.price, lastPurchasePrice: last.price, lastPurchaseDate: last.date } : {}),
         },
       });

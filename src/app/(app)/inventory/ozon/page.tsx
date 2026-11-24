@@ -7,16 +7,16 @@ import { LinkPurchase } from "@/components/link-purchase";
 import { PageHeader } from "@/components/ui";
 
 /** Покупки с Озона (по ссылке) и прочие покупки не для склада */
-export default async function OzonPage({ searchParams }: { searchParams: Promise<{ ok?: string }> }) {
+export default async function OzonPage({ searchParams }: { searchParams: Promise<{ ok?: string; t?: string }> }) {
   await requireUser();
-  const { ok } = await searchParams;
+  const { ok, t } = await searchParams;
   const today = toISODate(new Date());
   return (
     <div className="space-y-4">
       <PageHeader title="Покупка с Озона" subtitle="Вставьте ссылку на товар и сумму — покупка попадёт на склад и в «Траты»." back="/inventory" />
       {ok && <div className="card card-pad text-emerald-700">✓ Записано: {ok}. Можно вносить следующую покупку.</div>}
       <div className="card pt-4">
-        <LinkPurchase key={ok ?? "new"} today={today} />
+        <LinkPurchase key={t ?? "new"} today={today} />
       </div>
 
       <details className="card">

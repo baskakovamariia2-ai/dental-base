@@ -54,7 +54,7 @@ export function UpdImporter() {
         date: preview.upd.date,
         seller: preview.upd.seller,
         total: preview.upd.total,
-        rows: preview.rows.map((x) => ({ n: x.n, name: x.name, unit: x.unit, qty: x.qty, price: x.price, target: choice[x.n].target, addQty: choice[x.n].addQty })),
+        rows: preview.rows.map((x) => ({ n: x.n, name: x.name, unit: x.unit, qty: x.qty, price: x.price, sum: x.sum, target: choice[x.n].target, addQty: choice[x.n].addQty })),
       }),
     );
     setBusy(false);

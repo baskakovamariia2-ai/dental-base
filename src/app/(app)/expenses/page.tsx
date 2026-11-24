@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { addMonths, parseISODate, startOfMonth, toISODate } from "@/lib/dates";
 import { fmtDate, money } from "@/lib/format";
 import { expenseCategoryLabel } from "@/lib/expenses";
+import { purchaseSum } from "@/lib/purchase-sum";
 import { deleteExpense, deletePurchase } from "@/actions/expenses";
 import { cleanupManualPurchasesOnce, cleanupReport } from "@/lib/cleanup";
 import { ConfirmButton } from "@/components/auto-submit";
@@ -28,11 +29,11 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
     prisma.expense.findMany({ where: { date: { gte: m, lt: next } }, orderBy: { date: "desc" } }),
     prisma.purchase.findMany({ where: { date: { gte: m, lt: next } }, include: { item: true, supplier: true }, orderBy: { date: "desc" } }),
     prisma.expense.aggregate({ _sum: { amount: true } }),
-    prisma.purchase.findMany({ select: { quantity: true, price: true } }),
+    prisma.purchase.findMany({ select: { quantity: true, price: true, total: true } }),
     prisma.expense.aggregate({ where: { date: { gte: yearStart, lt: new Date(m.getFullYear() + 1, 0, 1) } }, _sum: { amount: true } }),
-    prisma.purchase.findMany({ where: { date: { gte: yearStart, lt: new Date(m.getFullYear() + 1, 0, 1) } }, select: { quantity: true, price: true } }),
+    prisma.purchase.findMany({ where: { date: { gte: yearStart, lt: new Date(m.getFullYear() + 1, 0, 1) } }, select: { quantity: true, price: true, total: true } }),
   ]);
-  const purSum = (list: { quantity: number; price: number }[]) => list.reduce((s, p) => s + Math.round(p.quantity * p.price), 0);
+  const purSum = (list: { quantity: number; price: number; total: number | null }[]) => list.reduce((s, p) => s + purchaseSum(p), 0);
 
   const rows: Row[] = [
     ...expenses.map((e) => ({ key: e.id, date: e.date, title: e.title, amount: e.amount, category: e.category, note: e.comment, expenseId: e.id, purchaseId: null, archived: false, href: null })),
@@ -40,7 +41,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
       key: p.id,
       date: p.date,
       title: p.item.name,
-      amount: Math.round(p.quantity * p.price),
+      amount: purchaseSum(p),
       category: "STOCK",
       note: [
         /^(Заказ|УПД)/.test(p.comment ?? "") ? `📄 ${p.comment}` : /^(Озон|Wildberries)/.test(p.comment ?? "") ? `🛒 ${(p.comment ?? "").split(":")[0]}` : "✍️ вручную",
