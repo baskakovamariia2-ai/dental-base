@@ -23,15 +23,24 @@ export async function vapidKeys(): Promise<Keys> {
   }
 }
 
+/** Запомнить адрес сайта (https://…), с которого открыта база — нужен для подписи уведомлений */
+export async function rememberOrigin(req: Request) {
+  const h = req.headers;
+  const host = (h.get("x-forwarded-host") ?? h.get("host") ?? "").split(",")[0].trim();
+  if (!host || !/^[a-z0-9.-]+(:\d+)?$/i.test(host) || /localhost|^\d+\.\d+\.\d+\.\d+(:\d+)?$/.test(host)) return;
+  const value = `https://${host}`;
+  await prisma.setting.upsert({ where: { key: "push-origin" }, create: { key: "push-origin", value }, update: { value } }).catch(() => {});
+}
+
 export type PushPayload = { title: string; body: string; tag?: string; url?: string };
 
 /** Отправить уведомление на все подписанные телефоны (или только одного пользователя) */
 export async function sendPush(payload: PushPayload, userId?: string) {
   const wp = await webpush();
   const keys = await vapidKeys();
-  // Apple требует настоящий адрес в «sub» — берём почту владельца базы
-  const owner = await prisma.user.findFirst({ where: { isActive: true }, orderBy: { createdAt: "asc" }, select: { email: true } });
-  wp.setVapidDetails(`mailto:${owner?.email ?? "admin@example.com"}`, keys.publicKey, keys.privateKey);
+  // Apple требует настоящий адрес в «sub» — берём адрес сайта базы (почту наружу не отправляем)
+  const origin = (await prisma.setting.findUnique({ where: { key: "push-origin" } }))?.value;
+  wp.setVapidDetails(origin && /^https:\/\/[^/]+$/.test(origin) ? origin : "mailto:admin@example.com", keys.publicKey, keys.privateKey);
   const subs = await prisma.pushSubscription.findMany({ where: userId ? { userId } : {} });
   let sent = 0;
   const errors: string[] = [];

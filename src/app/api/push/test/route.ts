@@ -1,15 +1,16 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
-import { dayScheduleMessage, sendPush } from "@/lib/push";
+import { dayScheduleMessage, rememberOrigin, sendPush } from "@/lib/push";
 import { addDays, startOfDay } from "@/lib/dates";
 import { prisma } from "@/lib/db";
 
 export const runtime = "nodejs";
 
 /** Пробное уведомление: расписание ближайшего дня с приёмами */
-export async function POST() {
+export async function POST(req: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "auth" }, { status: 401 });
+  await rememberOrigin(req);
   const next = await prisma.appointment.findFirst({
     where: { startsAt: { gte: startOfDay(new Date()), lt: addDays(new Date(), 60) }, status: { notIn: ["CANCELLED", "NO_SHOW"] } },
     orderBy: { startsAt: "asc" },

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
+import { rememberOrigin } from "@/lib/push";
 
 export const runtime = "nodejs";
 
@@ -10,6 +11,7 @@ export async function POST(req: Request) {
   if (!user) return NextResponse.json({ error: "auth" }, { status: 401 });
   const b = (await req.json().catch(() => null)) as { endpoint?: string; keys?: { p256dh?: string; auth?: string } } | null;
   if (!b?.endpoint || !/^https:\/\//.test(b.endpoint) || !b.keys?.p256dh || !b.keys?.auth) return NextResponse.json({ error: "bad" }, { status: 400 });
+  await rememberOrigin(req);
   await prisma.pushSubscription.upsert({
     where: { endpoint: b.endpoint },
     create: { userId: user.id, endpoint: b.endpoint, p256dh: b.keys.p256dh, auth: b.keys.auth },
