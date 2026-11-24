@@ -3,14 +3,13 @@ import type { InventoryItem, Prisma, Supplier } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { fmtQty, money } from "@/lib/format";
-import { toISODate } from "@/lib/dates";
 import { INVENTORY_CATEGORY, INVENTORY_CATEGORY_ALL, STOCK_LEVEL, categoryGroup, findOpt } from "@/lib/labels";
 import { openNewPackage, setOpenLevel } from "@/actions/inventory";
 import { resetExportKey } from "@/actions/consumables";
 import { headers } from "next/headers";
 import { getExportKey } from "@/lib/export-key";
 import { ConfirmButton } from "@/components/auto-submit";
-import { adjustQuantity, recordPurchase, setLevel, setToBuy } from "@/actions/inventory";
+import { adjustQuantity, setLevel } from "@/actions/inventory";
 import { isLowItem, loadProcedures, visitsLeft } from "@/lib/consumables";
 import { applyInventoryFixes } from "@/lib/inventory-fixes";
 import { Empty, PageHeader } from "@/components/ui";
@@ -34,12 +33,11 @@ export default async function InventoryPage({
   await requireUser();
   await applyInventoryFixes();
   const { tab: tabRaw = "cons", cat = "", q = "" } = await searchParams;
-  const tab = tabRaw === "all" || tabRaw === "low" ? "cons" : tabRaw;
+  const tab = tabRaw === "tools" ? "tools" : "cons";
 
   const where: Prisma.InventoryItemWhereInput = { archivedAt: null };
   if (q.trim()) where.name = { contains: q.trim(), mode: "insensitive" };
   if (cat && INVENTORY_CATEGORY.some((c) => c.value === cat)) where.category = { in: categoryGroup(cat) };
-  if (tab === "buy") where.toBuyQuantity = { not: null };
 
   const h = await headers();
   const origin = `${h.get("x-forwarded-proto") ?? "https"}://${h.get("x-forwarded-host") ?? h.get("host") ?? ""}`;
@@ -52,7 +50,6 @@ export default async function InventoryPage({
   ]);
   const isTool = (i: { category: string }) => i.category === "INSTRUMENTS";
   const low = everything.filter(isLowItem);
-  const buyCount = everything.filter((i) => i.toBuyQuantity).length;
 
   // сколько уходит за обычный приём (первая процедура, где позиция есть) — чтобы показать «на N приёмов»
   const perVisit = new Map<string, number>();
@@ -61,13 +58,10 @@ export default async function InventoryPage({
   const tracked = all.filter((i) => i.trackPerVisit && !isTool(i));
   const packaged = all.filter((i) => !i.trackPerVisit && !isTool(i));
   const tools = all.filter(isTool);
-  const buyItems = all.filter((i) => i.toBuyQuantity);
-  const buyTotal = buyItems.reduce((s, i) => s + (i.toBuyQuantity ?? 0) * (i.currentPrice ?? i.lastPurchasePrice ?? 0), 0);
 
   const tabs = [
     { key: "cons", label: "Расходники" },
     { key: "tools", label: "Инструменты" },
-    { key: "buy", label: `Закупить${buyCount ? ` · ${buyCount}` : ""}` },
   ];
   const href = (p: Record<string, string>) => `/inventory?${new URLSearchParams(Object.fromEntries(Object.entries({ tab, cat, q, ...p }).filter(([, v]) => v)))}`;
 
@@ -108,13 +102,10 @@ export default async function InventoryPage({
                 {low.map((i) => (
                   <div key={i.id} className="flex items-center gap-2 text-sm text-amber-900">
                     <Link href={`/inventory/${i.id}`} className="min-w-0 flex-1 break-words">{i.name}</Link>
-                    {i.toBuyQuantity ? (
-                      <span className="shrink-0 text-xs text-accent">в закупке</span>
-                    ) : (
-                      <form action={setToBuy.bind(null, i.id)} className="shrink-0">
-                        <input type="hidden" name="toBuyQuantity" value="1" />
-                        <button className="h-9 rounded-lg bg-white px-3 text-xs font-semibold text-amber-900 ring-1 ring-amber-200">В закупку</button>
-                      </form>
+                    {i.url && (
+                      <a href={i.url} target="_blank" rel="noopener noreferrer" className="flex h-9 shrink-0 items-center rounded-lg bg-white px-3 text-xs font-semibold text-amber-900 ring-1 ring-amber-200">
+                        Купить ↗
+                      </a>
                     )}
                   </div>
                 ))}
@@ -191,54 +182,6 @@ export default async function InventoryPage({
             </div>
           )}
         </section>
-      )}
-
-      {tab === "buy" && (
-        <>
-          {buyItems.length === 0 ? (
-            <Empty>Список закупок пуст. Добавляйте из блока «Заканчивается» во вкладке «Расходники».</Empty>
-          ) : (
-            <>
-              <div className="card card-pad mb-3 flex items-baseline justify-between">
-                <span className="text-ink-soft">Примерная сумма закупки</span>
-                <span className="text-lg font-semibold tabular-nums">{money(buyTotal)}</span>
-              </div>
-              <div className="card divide-y divide-zinc-100">
-                {buyItems.map((i) => {
-                  const price = i.currentPrice ?? i.lastPurchasePrice;
-                  return (
-                    <div key={i.id} className="space-y-2 px-4 py-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <Link href={`/inventory/${i.id}`} className="min-w-0 flex-1 text-[15px] font-medium">{i.name}</Link>
-                        {i.url && <a href={i.url} target="_blank" rel="noopener noreferrer" className="shrink-0 text-sm text-accent">Ссылка на товар</a>}
-                      </div>
-                      <form action={setToBuy.bind(null, i.id)} className="flex items-center gap-2 text-sm">
-                        <span className="text-ink-soft">Купить:</span>
-                        <input name="toBuyQuantity" inputMode="decimal" defaultValue={fmtQty(i.toBuyQuantity ?? 1)} className="input h-10 w-20" aria-label="Сколько купить" />
-                        <span className="text-ink-mute">{i.unit} × {money(price)}</span>
-                        <button className="btn-ghost btn-sm ml-auto">OK</button>
-                      </form>
-                      <details>
-                        <summary className="btn-primary btn-sm cursor-pointer list-none">Отметить как купленное</summary>
-                        <form action={recordPurchase.bind(null, i.id)} className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                          <label className="block"><span className="label">Количество</span><input name="quantity" inputMode="decimal" defaultValue={fmtQty(i.toBuyQuantity ?? 1)} className="input" /></label>
-                          <label className="block"><span className="label">Цена за ед., ₽</span><input name="price" inputMode="numeric" defaultValue={price ?? ""} className="input" /></label>
-                          <label className="block"><span className="label">Дата</span><input name="date" type="date" defaultValue={toISODate(new Date())} className="input" /></label>
-                          <label className="block"><span className="label">Поставщик</span><input name="supplier" defaultValue={i.supplier?.name ?? ""} className="input" /></label>
-                          <button className="btn-accent col-span-2 sm:col-span-4">Подтвердить — остаток и цена обновятся</button>
-                        </form>
-                      </details>
-                      <form action={setToBuy.bind(null, i.id)}>
-                        <input type="hidden" name="toBuyQuantity" value="0" />
-                        <button className="text-xs text-ink-mute hover:underline">Убрать из списка</button>
-                      </form>
-                    </div>
-                  );
-                })}
-              </div>
-            </>
-          )}
-        </>
       )}
 
       <details className="card mt-8">

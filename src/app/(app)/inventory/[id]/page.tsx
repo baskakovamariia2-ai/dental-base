@@ -3,9 +3,8 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { fmtDate, fmtQty, money } from "@/lib/format";
-import { toISODate } from "@/lib/dates";
 import { INVENTORY_CATEGORY_ALL, STOCK_LEVEL, findOpt } from "@/lib/labels";
-import { adjustQuantity, openNewPackage, recordPurchase, setLevel, setOpenLevel, setToBuy } from "@/actions/inventory";
+import { adjustQuantity, openNewPackage, setLevel, setOpenLevel } from "@/actions/inventory";
 import { Empty, PageHeader } from "@/components/ui";
 import { inventoryRowHref, isLowItem } from "@/lib/consumables";
 
@@ -18,7 +17,6 @@ export default async function ItemPage({ params }: { params: Promise<{ id: strin
   });
   if (!item) notFound();
   const low = isLowItem(item);
-  const price = item.currentPrice ?? item.lastPurchasePrice;
 
   return (
     <div className="space-y-4">
@@ -94,30 +92,9 @@ export default async function ItemPage({ params }: { params: Promise<{ id: strin
         <Row label="Поставщик">{item.supplier?.name ?? "—"}</Row>
       </div>
 
-      <div className="card card-pad">
-        <div className="section-title">Закупка</div>
-        {item.toBuyQuantity ? (
-          <div className="mb-3 flex items-center justify-between text-sm">
-            <span>В списке «Закупить»: {fmtQty(item.toBuyQuantity)} {item.unit}</span>
-            <form action={setToBuy.bind(null, id)}><input type="hidden" name="toBuyQuantity" value="0" /><button className="text-ink-mute hover:underline">Убрать</button></form>
-          </div>
-        ) : (
-          <form action={setToBuy.bind(null, id)} className="mb-4 flex items-center gap-2">
-            <input name="toBuyQuantity" inputMode="decimal" placeholder="Сколько" className="input w-28" />
-            <button className="btn-secondary">Добавить в закупку</button>
-          </form>
-        )}
-        <details>
-          <summary className="btn-primary cursor-pointer list-none">Отметить как купленное</summary>
-          <form action={recordPurchase.bind(null, id)} className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <label className="block"><span className="label">Количество</span><input name="quantity" inputMode="decimal" defaultValue={item.toBuyQuantity ? fmtQty(item.toBuyQuantity) : ""} required className="input" /></label>
-            <label className="block"><span className="label">Цена за ед., ₽</span><input name="price" inputMode="numeric" defaultValue={price ?? ""} className="input" /></label>
-            <label className="block"><span className="label">Дата</span><input name="date" type="date" defaultValue={toISODate(new Date())} className="input" /></label>
-            <label className="block"><span className="label">Поставщик</span><input name="supplier" defaultValue={item.supplier?.name ?? ""} className="input" /></label>
-            <label className="col-span-2 block sm:col-span-4"><span className="label">Комментарий</span><input name="comment" className="input" /></label>
-            <button className="btn-accent col-span-2 sm:col-span-4">Подтвердить покупку</button>
-          </form>
-        </details>
+      <div className="card card-pad text-sm text-ink-soft">
+        Покупки вносятся на Складе через «📄 Авельдент» (заказ или УПД) или «🛒 Озон» — остаток и цена здесь обновятся сами.
+        {item.url && <> <a href={item.url} target="_blank" rel="noopener noreferrer" className="font-medium text-accent">Купить снова ↗</a></>}
       </div>
 
       <div>
