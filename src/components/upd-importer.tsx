@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { importUpd } from "@/actions/upd";
 
-type Row = { n: number; name: string; unit: string; qty: number; price: number; sum: number; matchId: string | null; matchName: string | null; dup: boolean; addQty: boolean };
+type Row = { n: number; name: string; unit: string; qty: number; price: number; sum: number; matchId: string | null; matchName: string | null; dup: boolean; dupInfo: string | null; addQty: boolean };
 type Preview = {
   upd: { kind?: "upd" | "order"; number: string | null; date: string | null; seller: string | null; total: number | null; order: string | null };
   already: boolean;
@@ -106,7 +106,7 @@ export function UpdImporter() {
                       <div className="text-ink-mute">{r.qty} {r.unit} × {rub(r.price)}</div>
                     </div>
                   </div>
-                  {r.dup && <div className="text-xs text-amber-700">Похоже, эта покупка уже внесена (такая же позиция и количество в эти дни) — по умолчанию пропускаю.</div>}
+                  {r.dup && <div className="rounded-lg bg-amber-50 px-2 py-1.5 text-xs text-amber-800">⚠️ Похоже на дубль: {r.dupInfo}. По умолчанию пропускаю — если это другая покупка, выберите позицию вручную.</div>}
                   <TargetChooser
                     value={c.target}
                     matchId={r.matchId}

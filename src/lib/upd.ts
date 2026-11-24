@@ -42,7 +42,7 @@ export const aveldentSearch = (name: string) =>
 
 export type UpdPreviewRow = {
   n: number; name: string; unit: string; qty: number; price: number; sum: number;
-  matchId: string | null; matchName: string | null; dup: boolean; addQty: boolean;
+  matchId: string | null; matchName: string | null; dup: boolean; dupInfo: string | null; addQty: boolean;
 };
 
 /** Ключ документа: у заказа — «З-номер», у УПД — его номер */
@@ -71,14 +71,20 @@ export async function previewUpd(upd: Upd) {
       if (s > score) { score = s; best = it; }
     }
     const match = score >= 0.6 ? best : null;
-    const dup = match
-      ? !!(await prisma.purchase.findFirst({
-          where: { itemId: match.id, quantity: r.qty, date: { gte: new Date(date.getTime() - 3 * 86400000), lte: new Date(date.getTime() + 3 * 86400000) } },
-        }))
-      : false;
+    // уже есть покупка этой позиции рядом по дате (любое количество, в т.ч. внесённая вручную) — похоже на дубль
+    const near = match
+      ? await prisma.purchase.findFirst({
+          where: { itemId: match.id, date: { gte: new Date(date.getTime() - 10 * 86400000), lte: new Date(date.getTime() + 10 * 86400000) } },
+          orderBy: { date: "asc" },
+        })
+      : null;
+    const dup = !!near;
+    const dupInfo = near
+      ? `уже есть покупка ${near.date.toLocaleDateString("ru-RU")} — ${near.quantity} × ${near.price} ₽${/^(Заказ|УПД)/.test(near.comment ?? "") ? ` (${near.comment})` : /^(Озон|Wildberries)/.test(near.comment ?? "") ? " (Озон)" : " (внесено вручную)"}`
+      : null;
     // позиция заведена на склад уже после покупки (из описи) — её количество, скорее всего, уже учтено
     const countedAlready = match ? match.createdAt.getTime() > date.getTime() : false;
-    rows.push({ ...r, matchId: match?.id ?? null, matchName: match?.name ?? null, dup, addQty: !dup && !countedAlready });
+    rows.push({ ...r, matchId: match?.id ?? null, matchName: match?.name ?? null, dup, dupInfo, addQty: !dup && !countedAlready });
   }
   return { upd, already: !!already, alreadyWhat: already ? (already.number.startsWith("З-") ? `заказ № ${already.number.slice(2)}` : `УПД № ${already.number}`) : null, rows, items: items.map((i) => ({ id: i.id, name: i.name })) };
 }
