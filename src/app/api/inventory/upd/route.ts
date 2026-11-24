@@ -13,7 +13,7 @@ export async function POST(req: Request) {
   if (!(file instanceof File) || file.size > 15 * 1024 * 1024) return NextResponse.json({ error: "Нужен PDF-файл до 15 МБ" }, { status: 400 });
   try {
     const upd = await readUpdPdf(new Uint8Array(await file.arrayBuffer()));
-    if (!upd.rows.length) return NextResponse.json({ error: "Не нашла таблицу товаров. Это точно УПД в PDF?" }, { status: 422 });
+    if (!upd.rows.length) return NextResponse.json({ error: "Не нашла таблицу товаров. Пришлите этот файл в чат с Claude — настроим чтение такого документа." }, { status: 422 });
     return NextResponse.json(await previewUpd(upd));
   } catch {
     return NextResponse.json({ error: "Не удалось прочитать PDF" }, { status: 422 });

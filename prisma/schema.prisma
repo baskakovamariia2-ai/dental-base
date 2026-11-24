@@ -505,7 +505,9 @@ model UpdImport {
   seller    String   @default("")
   total     Int      @default(0)
   rows      Int      @default(0)
+  orderNumber String? // номер заказа клиента — заказ и его УПД не записываем дважды
   createdAt DateTime @default(now())
 
   @@unique([number, seller])
+  @@index([orderNumber])
 }

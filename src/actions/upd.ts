@@ -4,10 +4,10 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { guessCategory } from "@/lib/inventory-category";
-import { aveldentSearch, sellerName } from "@/lib/upd";
+import { aveldentSearch, docKey, findImported, sellerName } from "@/lib/upd";
 
 type ImportRow = { n: number; name: string; unit: string; qty: number; price: number; target: string; addQty: boolean }; // target: id позиции | "new" | "skip"
-type ImportPayload = { number: string | null; date: string | null; seller: string | null; total: number | null; rows: ImportRow[] };
+type ImportPayload = { kind?: "upd" | "order"; number: string | null; order?: string | null; date: string | null; seller: string | null; total: number | null; rows: ImportRow[] };
 
 /** Записать УПД: покупки (для «Трат»), остатки на складе, новые позиции со ссылкой на поиск */
 export async function importUpd(json: string): Promise<{ ok: boolean; message: string }> {
@@ -18,10 +18,13 @@ export async function importUpd(json: string): Promise<{ ok: boolean; message: s
   } catch {
     return { ok: false, message: "Ошибка данных" };
   }
-  const number = (p.number ?? "").slice(0, 50);
+  const kind = p.kind === "order" ? "order" : "upd";
+  const number = (docKey({ kind, number: p.number }) ?? "").slice(0, 50);
+  const order = (p.order ?? "").slice(0, 50) || null;
   const seller = (p.seller ?? "").slice(0, 200);
-  if (number && (await prisma.updImport.findUnique({ where: { number_seller: { number, seller } } }))) {
-    return { ok: false, message: `УПД № ${number} уже загружен раньше — повторно не записываю.` };
+  const prev = await findImported({ kind, number: p.number, order });
+  if (prev) {
+    return { ok: false, message: `Этот документ (или заказ № ${order ?? p.number}) уже загружен раньше — повторно не записываю, чтобы траты не задвоились.` };
   }
   const date = p.date && /^\d{4}-\d{2}-\d{2}$/.test(p.date) ? new Date(`${p.date}T12:00:00`) : new Date();
   const sName = sellerName(p.seller);
@@ -50,7 +53,7 @@ export async function importUpd(json: string): Promise<{ ok: boolean; message: s
       }
       const item = await tx.inventoryItem.findUnique({ where: { id: itemId } });
       if (!item) continue;
-      await tx.purchase.create({ data: { itemId, date, quantity: r.qty, price, supplierId: supplier.id, comment: number ? `УПД № ${number}` : "УПД" } });
+      await tx.purchase.create({ data: { itemId, date, quantity: r.qty, price, supplierId: supplier.id, comment: p.number ? (kind === "order" ? `Заказ № ${p.number}` : `УПД № ${p.number}`) : "Документ" } });
       await tx.inventoryItem.update({
         where: { id: itemId },
         data: {
@@ -64,7 +67,7 @@ export async function importUpd(json: string): Promise<{ ok: boolean; message: s
       added++;
     }
     if (number) {
-      await tx.updImport.create({ data: { number, seller, date, total: Math.round(p.total ?? 0), rows: added } });
+      await tx.updImport.create({ data: { number, seller, date, total: Math.round(p.total ?? 0), rows: added, orderNumber: order } });
     }
   });
   revalidatePath("/inventory");

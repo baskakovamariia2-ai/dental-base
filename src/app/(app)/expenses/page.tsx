@@ -3,10 +3,9 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { addMonths, parseISODate, startOfMonth, toISODate } from "@/lib/dates";
 import { fmtDate, money } from "@/lib/format";
-import { EXPENSE_CATEGORY, expenseCategoryLabel } from "@/lib/expenses";
-import { addExpense, deleteExpense } from "@/actions/expenses";
+import { expenseCategoryLabel } from "@/lib/expenses";
+import { deleteExpense } from "@/actions/expenses";
 import { ConfirmButton } from "@/components/auto-submit";
-import { LinkPurchase } from "@/components/link-purchase";
 import { Empty, PageHeader, Stat } from "@/components/ui";
 import { IconBack, IconChevron } from "@/components/icons";
 
@@ -54,11 +53,10 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
   const allTotal = (allExp._sum.amount ?? 0) + purSum(allPur);
   const monthKey = (d: Date) => toISODate(d).slice(0, 7);
   const title = m.toLocaleDateString("ru-RU", { month: "long", year: "numeric" });
-  const today = toISODate(new Date());
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Траты" subtitle="Всё, что купили для кабинета: покупки на склад подтягиваются сами, остальное добавляйте ниже." back="/more" />
+      <PageHeader title="Траты" subtitle="Сколько вложили в кабинет: всё, что внесено на Складе — Авельдент, Озон и другие покупки." back="/more" />
 
       <div className="flex items-center gap-2">
         <Link href={`/expenses?month=${monthKey(addMonths(m, -1))}`} className="btn-secondary h-11 w-11 px-0" aria-label="Предыдущий месяц"><IconBack /></Link>
@@ -82,28 +80,6 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
           ))}
         </div>
       )}
-
-      <details className="card">
-        <summary className="cursor-pointer list-none px-4 py-3.5 text-[15px] font-medium">🛒 Покупка по ссылке (Озон и др.)</summary>
-        <LinkPurchase today={today} />
-      </details>
-
-      <details className="card" open={rows.length === 0}>
-        <summary className="cursor-pointer list-none px-4 py-3.5 text-[15px] font-medium">+ Добавить трату</summary>
-        <form action={addExpense} className="grid grid-cols-2 gap-2 px-4 pb-4">
-          <label className="col-span-2 block"><span className="label">Что купили</span><input name="title" required placeholder="например, лампа, наконечник, обучение" className="input" /></label>
-          <label className="block"><span className="label">Сумма, ₽</span><input name="amount" required inputMode="numeric" className="input" /></label>
-          <label className="block"><span className="label">Дата</span><input name="date" type="date" defaultValue={today} className="input" /></label>
-          <label className="col-span-2 block">
-            <span className="label">Категория</span>
-            <select name="category" defaultValue="OTHER" className="input">
-              {Object.entries(EXPENSE_CATEGORY).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-            </select>
-          </label>
-          <label className="col-span-2 block"><span className="label">Комментарий</span><input name="comment" placeholder="где купили, ссылка" className="input" /></label>
-          <button className="btn-primary col-span-2">Добавить</button>
-        </form>
-      </details>
 
       <section>
         <h2 className="section-title">Все траты за месяц · {rows.length}</h2>
@@ -134,7 +110,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
             })}
           </div>
         )}
-        <p className="mt-2 px-1 text-xs text-ink-mute">Покупки на склад появляются здесь сами — и из «Отметить как купленное», и из загруженных УПД (Склад → 📄 УПД). Чтобы удалить такую покупку — откройте позицию склада.</p>
+        <p className="mt-2 px-1 text-xs text-ink-mute">Покупки вносятся на Складе: «📄 Авельдент» (заказ или УПД), «🛒 Озон» (по ссылке, там же — покупки не для склада) или «Отметить как купленное» у позиции. Сюда всё попадает само.</p>
       </section>
     </div>
   );

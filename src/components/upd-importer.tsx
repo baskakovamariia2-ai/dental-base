@@ -6,8 +6,9 @@ import { importUpd } from "@/actions/upd";
 
 type Row = { n: number; name: string; unit: string; qty: number; price: number; sum: number; matchId: string | null; matchName: string | null; dup: boolean; addQty: boolean };
 type Preview = {
-  upd: { number: string | null; date: string | null; seller: string | null; total: number | null; order: string | null };
+  upd: { kind?: "upd" | "order"; number: string | null; date: string | null; seller: string | null; total: number | null; order: string | null };
   already: boolean;
+  alreadyWhat: string | null;
   rows: Row[];
   items: { id: string; name: string }[];
 };
@@ -47,7 +48,9 @@ export function UpdImporter() {
     setBusy(true);
     const r = await importUpd(
       JSON.stringify({
+        kind: preview.upd.kind,
         number: preview.upd.number,
+        order: preview.upd.order,
         date: preview.upd.date,
         seller: preview.upd.seller,
         total: preview.upd.total,
@@ -67,11 +70,11 @@ export function UpdImporter() {
       {!preview && (
         <div className="card card-pad space-y-3">
           <label className="btn-primary w-full cursor-pointer py-3">
-            {busy ? "Читаю документ…" : "📄 Выбрать PDF с УПД"}
+            {busy ? "Читаю документ…" : "📄 Выбрать PDF: заказ или УПД"}
             <input type="file" accept="application/pdf,.pdf" className="hidden" disabled={busy} onChange={(e) => { upload(e.target.files?.[0]); e.target.value = ""; }} />
           </label>
           <p className="text-xs text-ink-mute">
-            На сайте Авельдента откройте УПД → «Поделиться» → «Сохранить в Файлы». Потом здесь выберите этот файл. Ничего не запишется, пока вы не проверите список и не нажмёте «Записать».
+            Подойдёт «Заказ клиента» или УПД с Авельдента: скачайте PDF и выберите его здесь. Заказ и УПД к нему — это одна покупка: если загрузить оба, второй база не запишет. Ничего не запишется, пока вы не проверите список и не нажмёте «Записать».
           </p>
         </div>
       )}
@@ -81,13 +84,13 @@ export function UpdImporter() {
       {preview && (
         <>
           <div className="card card-pad space-y-1 text-[15px]">
-            <div><b>УПД № {preview.upd.number ?? "?"}</b>{preview.upd.date ? ` от ${preview.upd.date.split("-").reverse().join(".")}` : ""}</div>
-            <div className="text-ink-soft">{preview.upd.seller ?? "Поставщик не найден"}{preview.upd.order ? ` · заказ № ${preview.upd.order}` : ""}</div>
+            <div><b>{preview.upd.kind === "order" ? "Заказ" : "УПД"} № {preview.upd.number ?? "?"}</b>{preview.upd.date ? ` от ${preview.upd.date.split("-").reverse().join(".")}` : ""}</div>
+            <div className="text-ink-soft">{preview.upd.seller ?? "Поставщик не найден"}{preview.upd.order && preview.upd.kind !== "order" ? ` · заказ № ${preview.upd.order}` : ""}</div>
             {preview.upd.total !== null && <div>Сумма документа: <b>{rub(preview.upd.total)}</b></div>}
           </div>
 
           {preview.already && (
-            <div className="card card-pad bg-amber-50 text-amber-900">⚠️ Этот УПД уже загружали раньше. Повторно записать его нельзя — так склад и траты не задвоятся.</div>
+            <div className="card card-pad bg-amber-50 text-amber-900">⚠️ Уже загружено раньше: {preview.alreadyWhat}. Это тот же заказ — повторно записать нельзя, чтобы склад и траты не задвоились.</div>
           )}
 
           <div className="space-y-2">

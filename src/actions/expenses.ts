@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { parseISODate, startOfDay } from "@/lib/dates";
@@ -24,12 +25,15 @@ export async function addExpense(formData: FormData) {
     },
   });
   revalidatePath("/expenses");
+  revalidatePath("/inventory");
+  redirect(`/inventory/ozon?ok=${encodeURIComponent(title)}`);
 }
 
 export async function deleteExpense(id: string) {
   await requireUser();
   await prisma.expense.deleteMany({ where: { id } });
   revalidatePath("/expenses");
+  revalidatePath("/inventory");
 }
 
 /** Покупка по ссылке (Озон и т.п.): на склад (с ссылкой) или просто в траты */
@@ -70,4 +74,6 @@ export async function addLinkPurchase(formData: FormData) {
     await prisma.expense.create({ data: { title, amount, date, category: "MATERIALS", comment: [shop, url].filter(Boolean).join(" · ") || null } });
   }
   revalidatePath("/expenses");
+  revalidatePath("/inventory");
+  redirect(`/inventory/ozon?ok=${encodeURIComponent(title)}`);
 }

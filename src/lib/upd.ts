@@ -1,5 +1,5 @@
 import { prisma } from "./db";
-import { parseUpd, type PdfItem, type Upd } from "./upd-parse";
+import { parseSupplierDoc, type PdfItem, type Upd } from "./upd-parse";
 
 /** Достаём текст с координатами из PDF (на сервере) */
 export async function readUpdPdf(data: Uint8Array): Promise<Upd> {
@@ -14,7 +14,7 @@ export async function readUpdPdf(data: Uint8Array): Promise<Upd> {
     }
   }
   await task.destroy();
-  return parseUpd(items);
+  return parseSupplierDoc(items);
 }
 
 const norm = (s: string) =>
@@ -45,11 +45,21 @@ export type UpdPreviewRow = {
   matchId: string | null; matchName: string | null; dup: boolean; addQty: boolean;
 };
 
+/** Ключ документа: у заказа — «З-номер», у УПД — его номер */
+export const docKey = (u: Pick<Upd, "kind" | "number">) => (u.number ? (u.kind === "order" ? `З-${u.number}` : u.number) : null);
+
+/** Уже загружали? Тот же документ — или заказ и УПД к нему (один и тот же номер заказа) */
+export async function findImported(u: Pick<Upd, "kind" | "number" | "order">) {
+  const key = docKey(u);
+  const or = [...(key ? [{ number: key }] : []), ...(u.order ? [{ orderNumber: u.order }] : [])];
+  return or.length ? prisma.updImport.findFirst({ where: { OR: or } }) : null;
+}
+
 /** Сопоставляем строки УПД со складом и ищем, не внесено ли это уже */
 export async function previewUpd(upd: Upd) {
   const [items, already] = await Promise.all([
     prisma.inventoryItem.findMany({ where: { archivedAt: null }, select: { id: true, name: true, createdAt: true }, orderBy: { name: "asc" } }),
-    upd.number ? prisma.updImport.findFirst({ where: { number: upd.number } }) : null,
+    findImported(upd),
   ]);
   const date = upd.date ? new Date(`${upd.date}T12:00:00`) : new Date();
   const rows: UpdPreviewRow[] = [];
@@ -70,5 +80,5 @@ export async function previewUpd(upd: Upd) {
     const countedAlready = match ? match.createdAt.getTime() > date.getTime() : false;
     rows.push({ ...r, matchId: match?.id ?? null, matchName: match?.name ?? null, dup, addQty: !dup && !countedAlready });
   }
-  return { upd, already: !!already, rows, items: items.map((i) => ({ id: i.id, name: i.name })) };
+  return { upd, already: !!already, alreadyWhat: already ? (already.number.startsWith("З-") ? `заказ № ${already.number.slice(2)}` : `УПД № ${already.number}`) : null, rows, items: items.map((i) => ({ id: i.id, name: i.name })) };
 }
