@@ -20,7 +20,8 @@ COPY prisma ./prisma
 RUN npm install --no-audit --no-fund
 
 COPY . .
-RUN npm run build
+# кэш сборки не нужен в готовом образе — экономим место на диске сервера
+RUN npm run build && rm -rf .next/cache
 
 ENV NODE_ENV=production
 ENV PORT=3000
