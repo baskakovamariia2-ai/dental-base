@@ -99,7 +99,16 @@ export async function dayScheduleMessage(day: Date): Promise<PushPayload | null>
   const n = aps.length;
   const word = n % 10 === 1 && n % 100 !== 11 ? "пациент" : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? "пациента" : "пациентов";
   // коротко, чтобы каждый пациент помещался в одну строку на заблокированном экране
-  const lines = aps.map((a) => `${hhmm(a.startsAt)} ${a.patient.lastName} · ${shortWhat(a.procedure, a.toothNumber)}`.replace(/ · $/, ""));
+  // имя целиком, если строка помещается без переноса; иначе инициал; иначе только фамилия
+  const FIT = 36;
+  const lines = aps.map((a) => {
+    const t = hhmm(a.startsAt);
+    const w = shortWhat(a.procedure, a.toothNumber);
+    const f = a.patient.firstName?.trim() ?? "";
+    const opts = [f && `${a.patient.lastName} ${f}`, f && `${a.patient.lastName} ${f[0]}.`, a.patient.lastName].filter(Boolean) as string[];
+    const make = (who: string) => `${t} ${who}${w ? ` · ${w}` : ""}`;
+    return make(opts.find((o) => make(o).length <= FIT) ?? a.patient.lastName);
+  });
   return {
     title: `🦷 ${n} ${word} · ${hhmm(aps[0].startsAt)}–${hhmm(end)}`,
     body: lines.join("\n"),
