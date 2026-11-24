@@ -27,11 +27,11 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
 
   const [expenses, purchases, allExp, allPur, yearExp, yearPur] = await Promise.all([
     prisma.expense.findMany({ where: { date: { gte: m, lt: next } }, orderBy: { date: "desc" } }),
-    prisma.purchase.findMany({ where: { date: { gte: m, lt: next } }, include: { item: true, supplier: true }, orderBy: { date: "desc" } }),
+    prisma.purchase.findMany({ where: { date: { gte: m, lt: next }, priceOnly: false }, include: { item: true, supplier: true }, orderBy: { date: "desc" } }),
     prisma.expense.aggregate({ _sum: { amount: true } }),
-    prisma.purchase.findMany({ select: { quantity: true, price: true, total: true } }),
+    prisma.purchase.findMany({ where: { priceOnly: false }, select: { quantity: true, price: true, total: true } }),
     prisma.expense.aggregate({ where: { date: { gte: yearStart, lt: new Date(m.getFullYear() + 1, 0, 1) } }, _sum: { amount: true } }),
-    prisma.purchase.findMany({ where: { date: { gte: yearStart, lt: new Date(m.getFullYear() + 1, 0, 1) } }, select: { quantity: true, price: true, total: true } }),
+    prisma.purchase.findMany({ where: { date: { gte: yearStart, lt: new Date(m.getFullYear() + 1, 0, 1) }, priceOnly: false }, select: { quantity: true, price: true, total: true } }),
   ]);
   const purSum = (list: { quantity: number; price: number; total: number | null }[]) => list.reduce((s, p) => s + purchaseSum(p), 0);
 

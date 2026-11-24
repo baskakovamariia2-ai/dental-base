@@ -458,6 +458,7 @@ model Purchase {
   price      Int // цена за единицу
   total      Int? // сколько заплатили всего (точно, без округления цены за штуку)
   stockAdded Boolean       @default(true) // прибавлялось ли к остатку — при удалении вычитаем только если да
+  priceOnly  Boolean       @default(false) // старый документ: только история цен, не в «Траты» и не на склад
   supplierId String?
   supplier   Supplier?     @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   comment    String?

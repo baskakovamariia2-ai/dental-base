@@ -123,7 +123,7 @@ export default async function ItemPage({ params }: { params: Promise<{ id: strin
                 <div key={p.id} className="flex items-center justify-between gap-3 px-4 py-3 text-[15px]">
                   <div>
                     <div>{fmtDate(p.date)} — {fmtQty(p.quantity)} {item.unit}</div>
-                    <div className="text-xs text-ink-mute">{p.supplier?.name ?? ""}{p.comment ? ` · ${p.comment}` : ""}</div>
+                    <div className="text-xs text-ink-mute">{p.supplier?.name ?? ""}{p.comment ? ` · ${p.comment}` : ""}{p.priceOnly ? " · 📜 только цена" : ""}</div>
                   </div>
                   <div className="text-right tabular-nums">
                     <div className="font-medium">{money(p.price)}</div>

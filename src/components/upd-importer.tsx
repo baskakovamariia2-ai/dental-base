@@ -21,6 +21,7 @@ export function UpdImporter() {
   const [choice, setChoice] = useState<Record<number, Choice>>({});
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [priceOnly, setPriceOnly] = useState(false);
 
   const upload = async (file: File | undefined) => {
     if (!file) return;
@@ -48,6 +49,7 @@ export function UpdImporter() {
     setBusy(true);
     const r = await importUpd(
       JSON.stringify({
+        priceOnly,
         kind: preview.upd.kind,
         number: preview.upd.number,
         order: preview.upd.order,
@@ -89,6 +91,14 @@ export function UpdImporter() {
             {preview.upd.total !== null && <div>Сумма документа: <b>{rub(preview.upd.total)}</b></div>}
           </div>
 
+          <label className={`card card-pad flex items-start gap-3 ${priceOnly ? "ring-2 ring-accent" : ""}`}>
+            <input type="checkbox" checked={priceOnly} onChange={(e) => setPriceOnly(e.target.checked)} className="mt-0.5 h-5 w-5 shrink-0 accent-teal-700" />
+            <span className="text-[15px]">
+              <b>📜 Старый документ — только история цен</b>
+              <span className="block text-sm text-ink-soft">Цены запишутся в историю товаров («Предыдущая покупка»), но не попадут в «Траты» и не изменят остаток на складе. Задвоиться ничего не может.</span>
+            </span>
+          </label>
+
           {preview.already && (
             <div className="card card-pad bg-amber-50 text-amber-900">⚠️ Уже загружено раньше: {preview.alreadyWhat}. Это тот же заказ — повторно записать нельзя, чтобы склад и траты не задвоились.</div>
           )}
@@ -113,13 +123,13 @@ export function UpdImporter() {
                     items={preview.items}
                     onChange={(v) => set(r.n, { target: v, addQty: v === "new" ? true : v === r.matchId ? r.addQty : true })}
                   />
-                  {!skip && c.target !== "new" && (
+                  {!skip && !priceOnly && c.target !== "new" && (
                     <label className="flex items-center gap-2 text-sm text-ink-soft">
                       <input type="checkbox" checked={c.addQty} onChange={(e) => set(r.n, { addQty: e.target.checked })} className="h-5 w-5 accent-teal-700" />
                       Прибавить {r.qty} {r.unit} к остатку на складе
                     </label>
                   )}
-                  {!skip && !c.addQty && c.target !== "new" && <div className="text-xs text-ink-mute">Остаток не изменится — запишется только покупка в «Траты».</div>}
+                  {!skip && !priceOnly && !c.addQty && c.target !== "new" && <div className="text-xs text-ink-mute">Остаток не изменится — запишется только покупка в «Траты».</div>}
                 </div>
               );
             })}
@@ -127,7 +137,7 @@ export function UpdImporter() {
 
           <div className="space-y-2">
             <button type="button" disabled={busy || preview.already || active.length === 0} onClick={save} className="btn-primary w-full py-3">
-              {busy ? "Записываю…" : `Записать ${active.length} поз. · ${rub(active.reduce((s, r) => s + r.sum, 0))}`}
+              {busy ? "Записываю…" : priceOnly ? `Записать цены (${active.length} поз.)` : `Записать ${active.length} поз. · ${rub(active.reduce((s, r) => s + r.sum, 0))}`}
             </button>
             <button type="button" onClick={() => setPreview(null)} className="btn-secondary w-full">Отмена</button>
           </div>

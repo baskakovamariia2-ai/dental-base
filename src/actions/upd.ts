@@ -7,7 +7,7 @@ import { guessCategory } from "@/lib/inventory-category";
 import { aveldentSearch, docKey, findImported, sellerName } from "@/lib/upd";
 
 type ImportRow = { n: number; name: string; unit: string; qty: number; price: number; sum?: number; target: string; addQty: boolean }; // target: id позиции | "new" | "skip"
-type ImportPayload = { kind?: "upd" | "order"; number: string | null; order?: string | null; date: string | null; seller: string | null; total: number | null; rows: ImportRow[] };
+type ImportPayload = { priceOnly?: boolean; kind?: "upd" | "order"; number: string | null; order?: string | null; date: string | null; seller: string | null; total: number | null; rows: ImportRow[] };
 
 /** Записать УПД: покупки (для «Трат»), остатки на складе, новые позиции со ссылкой на поиск */
 export async function importUpd(json: string): Promise<{ ok: boolean; message: string }> {
@@ -36,6 +36,7 @@ export async function importUpd(json: string): Promise<{ ok: boolean; message: s
     for (const r of rows) {
       const price = Math.round(r.price || 0);
       let itemId = r.target;
+      if (p.priceOnly && r.target === "new") continue; // история цен — только для товаров, которые уже есть на складе
       if (r.target === "new") {
         const item = await tx.inventoryItem.create({
           data: {
@@ -53,8 +54,9 @@ export async function importUpd(json: string): Promise<{ ok: boolean; message: s
       }
       const item = await tx.inventoryItem.findUnique({ where: { id: itemId } });
       if (!item) continue;
-      const stockAdded = r.addQty || r.target === "new";
-      await tx.purchase.create({ data: { itemId, date, quantity: r.qty, price, total: Math.round((r as ImportRow & { sum?: number }).sum ?? r.qty * (r.price || 0)), stockAdded, supplierId: supplier.id, comment: p.number ? (kind === "order" ? `Заказ № ${p.number}` : `УПД № ${p.number}`) : "Документ" } });
+      const priceOnly = !!p.priceOnly;
+      const stockAdded = !priceOnly && (r.addQty || r.target === "new");
+      await tx.purchase.create({ data: { itemId, date, quantity: r.qty, price, total: Math.round((r as ImportRow & { sum?: number }).sum ?? r.qty * (r.price || 0)), stockAdded, priceOnly, supplierId: supplier.id, comment: p.number ? (kind === "order" ? `Заказ № ${p.number}` : `УПД № ${p.number}`) : "Документ" } });
       await tx.inventoryItem.update({
         where: { id: itemId },
         data: {
@@ -75,7 +77,12 @@ export async function importUpd(json: string): Promise<{ ok: boolean; message: s
   });
   revalidatePath("/inventory");
   revalidatePath("/expenses");
-  return { ok: true, message: `Записано позиций: ${added}${created ? `, новых на складе: ${created}` : ""}. Покупки — в «Тратах».` };
+  return {
+    ok: true,
+    message: p.priceOnly
+      ? `Записана история цен: ${added} поз. В «Траты» и на склад не попало.`
+      : `Записано позиций: ${added}${created ? `, новых на складе: ${created}` : ""}. Покупки — в «Тратах».`,
+  };
 }
 
 /**
