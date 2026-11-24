@@ -62,6 +62,8 @@ export async function importUpd(json: string): Promise<{ ok: boolean; message: s
           lastPurchasePrice: price,
           currentPrice: price,
           supplierId: item.supplierId ?? supplier.id,
+          // у товара не было ссылки — ставим ссылку на поиск этого товара на Авельденте
+          ...(!item.url && sName === "Авельдент" ? { url: aveldentSearch(r.name) } : {}),
         },
       });
       added++;

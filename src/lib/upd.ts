@@ -82,3 +82,12 @@ export async function previewUpd(upd: Upd) {
   }
   return { upd, already: !!already, alreadyWhat: already ? (already.number.startsWith("З-") ? `заказ № ${already.number.slice(2)}` : `УПД № ${already.number}`) : null, rows, items: items.map((i) => ({ id: i.id, name: i.name })) };
 }
+
+/** Товары, купленные на Авельденте, но без ссылки — ставим ссылку на поиск по названию (один раз, тихо) */
+export async function fillMissingAveldentLinks() {
+  const items = await prisma.inventoryItem.findMany({
+    where: { archivedAt: null, OR: [{ url: null }, { url: "" }], purchases: { some: { supplier: { name: "Авельдент" } } } },
+    select: { id: true, name: true },
+  });
+  for (const it of items) await prisma.inventoryItem.update({ where: { id: it.id }, data: { url: aveldentSearch(it.name) } });
+}

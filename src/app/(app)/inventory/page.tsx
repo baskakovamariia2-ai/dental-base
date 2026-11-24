@@ -10,6 +10,7 @@ import { headers } from "next/headers";
 import { getExportKey } from "@/lib/export-key";
 import { ConfirmButton } from "@/components/auto-submit";
 import { adjustQuantity, setLevel } from "@/actions/inventory";
+import { fillMissingAveldentLinks } from "@/lib/upd";
 import { isLowItem, loadProcedures, visitsLeft } from "@/lib/consumables";
 import { applyInventoryFixes } from "@/lib/inventory-fixes";
 import { Empty, PageHeader } from "@/components/ui";
@@ -32,6 +33,7 @@ export default async function InventoryPage({
 }) {
   await requireUser();
   await applyInventoryFixes();
+  await fillMissingAveldentLinks();
   const { tab: tabRaw = "cons", cat = "", q = "" } = await searchParams;
   const tab = tabRaw === "tools" ? "tools" : "cons";
 
