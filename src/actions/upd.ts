@@ -59,8 +59,8 @@ export async function importUpd(json: string): Promise<{ ok: boolean; message: s
         data: {
           ...(r.addQty || r.target === "new" ? { quantity: item.quantity + r.qty, ...(item.countable ? {} : { level: "PLENTY" as const }) } : {}),
           lastPurchaseDate: !item.lastPurchaseDate || item.lastPurchaseDate < date ? date : item.lastPurchaseDate,
-          lastPurchasePrice: price,
-          currentPrice: price,
+          // цену «сейчас» меняем, только если этот документ не старее последней покупки
+          ...(!item.lastPurchaseDate || item.lastPurchaseDate <= date ? { lastPurchasePrice: price, currentPrice: price } : {}),
           supplierId: item.supplierId ?? supplier.id,
           // у товара не было ссылки — ставим ссылку на поиск этого товара на Авельденте
           ...(!item.url && sName === "Авельдент" ? { url: aveldentSearch(r.name) } : {}),

@@ -87,8 +87,21 @@ export default async function ItemPage({ params }: { params: Promise<{ id: strin
       </div>
 
       <div className="card divide-y divide-zinc-100">
-        <Row label="Текущая цена">{money(item.currentPrice)}</Row>
-        <Row label="Последняя закупка">{money(item.lastPurchasePrice)} · {fmtDate(item.lastPurchaseDate)}</Row>
+        {(() => {
+          // цены берём из истории покупок — так они всегда совпадают с документами
+          const [last, prev] = [...item.purchases].sort((a, b) => b.date.getTime() - a.date.getTime() || b.createdAt.getTime() - a.createdAt.getTime());
+          const diff = last && prev ? last.price - prev.price : 0;
+          return (
+            <>
+              <Row label="Цена сейчас">
+                {money(last?.price ?? item.currentPrice)}
+                {last && <span className="ml-1 text-xs text-ink-mute">· покупка {fmtDate(last.date)}</span>}
+                {diff !== 0 && <span className={`ml-1 text-xs ${diff > 0 ? "text-rose-600" : "text-emerald-600"}`}>{diff > 0 ? "+" : ""}{money(diff)}</span>}
+              </Row>
+              <Row label="Предыдущая покупка">{prev ? <>{money(prev.price)} <span className="text-xs text-ink-mute">· {fmtDate(prev.date)}</span></> : <span className="text-ink-mute">ещё не было</span>}</Row>
+            </>
+          );
+        })()}
         <Row label="Поставщик">{item.supplier?.name ?? "—"}</Row>
       </div>
 

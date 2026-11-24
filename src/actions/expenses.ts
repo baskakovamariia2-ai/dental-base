@@ -90,7 +90,15 @@ export async function deletePurchase(id: string) {
   await prisma.$transaction(async (tx) => {
     await tx.purchase.delete({ where: { id } });
     if (!p.item.archivedAt) {
-      await tx.inventoryItem.update({ where: { id: p.itemId }, data: { quantity: Math.max(0, p.item.quantity - p.quantity) } });
+      // цена «сейчас» и дата — снова по последней оставшейся покупке
+      const last = await tx.purchase.findFirst({ where: { itemId: p.itemId }, orderBy: [{ date: "desc" }, { createdAt: "desc" }] });
+      await tx.inventoryItem.update({
+        where: { id: p.itemId },
+        data: {
+          quantity: Math.max(0, p.item.quantity - p.quantity),
+          ...(last ? { currentPrice: last.price, lastPurchasePrice: last.price, lastPurchaseDate: last.date } : {}),
+        },
+      });
     }
   });
   revalidatePath("/expenses");
