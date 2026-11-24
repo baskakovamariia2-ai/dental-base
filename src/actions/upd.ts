@@ -76,3 +76,34 @@ export async function importUpd(json: string): Promise<{ ok: boolean; message: s
   revalidatePath("/expenses");
   return { ok: true, message: `Записано позиций: ${added}${created ? `, новых на складе: ${created}` : ""}. Покупки — в «Тратах».` };
 }
+
+/**
+ * Отменить загрузку документа: убрать его покупки из «Трат», вернуть остатки и цены, забыть документ —
+ * чтобы загрузить его заново (например, если в первый раз что-то прочиталось не так).
+ */
+export async function undoUpdImport(id: string) {
+  await requireUser();
+  const imp = await prisma.updImport.findUnique({ where: { id } });
+  if (!imp) return;
+  const label = imp.number.startsWith("З-") ? `Заказ № ${imp.number.slice(2)}` : `УПД № ${imp.number}`;
+  const purchases = await prisma.purchase.findMany({ where: { comment: label }, include: { item: true } });
+  await prisma.$transaction(async (tx) => {
+    for (const p of purchases) {
+      await tx.purchase.delete({ where: { id: p.id } });
+      const item = await tx.inventoryItem.findUnique({ where: { id: p.itemId } });
+      if (!item) continue;
+      const last = await tx.purchase.findFirst({ where: { itemId: p.itemId }, orderBy: [{ date: "desc" }, { createdAt: "desc" }] });
+      await tx.inventoryItem.update({
+        where: { id: p.itemId },
+        data: {
+          quantity: Math.max(0, item.quantity - p.quantity),
+          ...(last ? { currentPrice: last.price, lastPurchasePrice: last.price, lastPurchaseDate: last.date } : {}),
+        },
+      });
+    }
+    await tx.updImport.delete({ where: { id } });
+  });
+  revalidatePath("/inventory");
+  revalidatePath("/inventory/upd");
+  revalidatePath("/expenses");
+}
