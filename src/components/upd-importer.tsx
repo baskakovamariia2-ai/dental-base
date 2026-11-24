@@ -143,9 +143,10 @@ function TargetChooser({ value, matchId, items, onChange }: { value: string; mat
   const [open, setOpen] = useState(false);
   const current = value === "skip" ? "Пропустить (не записывать)" : value === "new" ? "➕ Новая позиция на складе" : `✓ ${items.find((i) => i.id === value)?.name ?? ""}`;
   const words = q.toLowerCase().replace(/ё/g, "е").split(/\s+/).filter(Boolean);
+  // без поиска — весь склад по алфавиту, с поиском — только подходящие
   const found = words.length
-    ? items.filter((i) => { const n = i.name.toLowerCase().replace(/ё/g, "е"); return words.every((w) => n.includes(w)); }).slice(0, 30)
-    : [];
+    ? items.filter((i) => { const n = i.name.toLowerCase().replace(/ё/g, "е"); return words.every((w) => n.includes(w)); })
+    : items;
   const pick = (v: string) => { onChange(v); setOpen(false); setQ(""); };
   const chip = (on: boolean) => `rounded-full px-3 py-1.5 text-sm ${on ? "bg-accent-soft font-medium text-accent-ink" : "bg-zinc-100 text-ink-soft"}`;
   return (
@@ -161,9 +162,10 @@ function TargetChooser({ value, matchId, items, onChange }: { value: string; mat
             <button type="button" onClick={() => pick("new")} className={chip(value === "new")}>➕ Новая позиция</button>
             <button type="button" onClick={() => pick("skip")} className={chip(value === "skip")}>Пропустить</button>
           </div>
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="🔍 Найти на складе: например, «матрицы» или «кламп 26»" className="input text-sm" autoFocus />
-          {words.length > 0 && (
-            <div className="max-h-64 divide-y divide-zinc-100 overflow-y-auto rounded-xl bg-white">
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="🔍 Найти на складе: например, «матрицы» или «кламп 26»" className="input text-sm" />
+          <div className="px-1 text-xs text-ink-mute">{words.length ? `Найдено: ${found.length}` : `Весь склад: ${items.length} — листайте или начните вводить название`}</div>
+          {(
+            <div className="max-h-72 divide-y divide-zinc-100 overflow-y-auto rounded-xl bg-white">
               {found.length === 0 ? (
                 <div className="px-3 py-2 text-sm text-ink-mute">Ничего не нашлось — попробуйте одно слово</div>
               ) : (
