@@ -117,7 +117,6 @@ export function parseOrder(items: PdfItem[]): Upd {
     const stop = ls.find((l) => l.page === page && l.y < topY && /^(Итого|Всего)/i.test(l.text.trim()));
     const botY = stop ? stop.y + 1 : -Infinity;
     const data = pi.filter((i) => i.y < topY && i.y > botY);
-    // строки: по y
     const byLine: PdfItem[][] = [];
     for (const it of [...data].sort((a, b) => b.y - a.y || a.x - b.x)) {
       const last = byLine[byLine.length - 1];
@@ -126,41 +125,49 @@ export function parseOrder(items: PdfItem[]): Upd {
     }
     byLine.forEach((l) => l.sort((a, b) => a.x - b.x));
     const minX = Math.min(...data.map((i) => i.x));
-    type Draft = { n: number; nameParts: string[]; nameX: [number, number]; unit: string; qty: number; price: number; sum: number };
-    let cur: Draft | null = null;
-    const flush = () => {
-      if (cur && cur.nameParts.length) rows.push({ n: cur.n, name: cur.nameParts.join(" ").replace(/\s+/g, " ").trim(), unit: cur.unit, qty: cur.qty, price: cur.price, sum: cur.sum });
-      cur = null;
-    };
+
+    type Draft = { y: number; n: number; pre: string[]; name: string[]; nameX: number; qtyX: number; unit: string; qty: number; price: number; sum: number };
+    const drafts: Draft[] = [];
+    const orphans: { y: number; items: PdfItem[] }[] = [];
     for (const l of byLine) {
       const t = l.map((i) => i.str.trim());
-      const isRow = INT.test(t[0]) && l[0].x < minX + 25 && t.length >= 4 && MONEY.test(t[t.length - 1]);
-      if (isRow) {
-        flush();
-        let k = t.length - 1;
-        const sum = num(t[k--]);
-        const price = MONEY.test(t[k]) ? num(t[k--]) : NaN;
-        let unit = "шт";
-        let qty = NaN;
-        if (UNIT.test(t[k] ?? "") && QTY.test(t[k - 1] ?? "")) { unit = t[k].replace(/\.$/, ""); qty = num(t[k - 1]); k -= 2; }
-        else if (QTY.test(t[k] ?? "")) { const m = t[k].match(QTY)!; qty = num(m[1]); if (m[2]) unit = m[2]; k--; }
-        let start = 1;
-        if (k >= 2 && CODE.test(t[1])) start = 2; // артикул
-        const nameItems = l.slice(start, k + 1);
-        cur = {
-          n: Number(t[0]),
-          nameParts: nameItems.map((i) => i.str.trim()),
-          nameX: nameItems.length ? [nameItems[0].x - 3, l[k + 1]?.x ?? Infinity] : [l[1]?.x ?? 0, Infinity],
-          unit, qty: isNaN(qty) ? 1 : qty, price: isNaN(price) ? sum : price, sum,
-        };
-        if (isNaN(price) && !isNaN(qty) && qty) cur.price = Math.round((sum / qty) * 100) / 100;
-      } else if (cur) {
-        // продолжение названия (вторая строка); перенос артикула левее названия — пропускаем
-        const parts = l.filter((i) => i.x >= cur!.nameX[0] && i.x < cur!.nameX[1] - 2).map((i) => i.str.trim());
-        if (parts.length) cur.nameParts.push(...parts);
+      const first = t[0].match(/^(\d{1,3})(?:\s+(\S+))?$/);
+      const isRow = !!first && l[0].x < minX + 25 && t.length >= 3 && MONEY.test(t[t.length - 1]);
+      if (!isRow) {
+        orphans.push({ y: l[0].y, items: l });
+        continue;
       }
+      let k = t.length - 1;
+      const sum = num(t[k--]);
+      const price = MONEY.test(t[k] ?? "") ? num(t[k--]) : NaN;
+      let unit = "шт";
+      let qty = NaN;
+      if (UNIT.test(t[k] ?? "") && QTY.test(t[k - 1] ?? "")) { unit = t[k].replace(/\.$/, ""); qty = num(t[k - 1]); k -= 2; }
+      else if (QTY.test(t[k] ?? "")) { const m = t[k].match(QTY)!; qty = num(m[1]); if (m[2]) unit = m[2]; k--; }
+      let start = 1;
+      if (!first![2] && k >= 2 && CODE.test(t[1])) start = 2; // артикул отдельной ячейкой
+      const nameItems = l.slice(start, k + 1);
+      const d: Draft = {
+        y: l[0].y, n: Number(first![1]), pre: [], name: nameItems.map((i) => i.str.trim()),
+        nameX: nameItems[0]?.x ?? (l[start]?.x ?? 0), qtyX: l[k + 1]?.x ?? Infinity,
+        unit, qty: isNaN(qty) ? 1 : qty, price: isNaN(price) ? sum : price, sum,
+      };
+      if (isNaN(price) && !isNaN(qty) && qty) d.price = Math.round((sum / qty) * 100) / 100;
+      drafts.push(d);
     }
-    flush();
+    // строки названия без номера: перенос. Бывает и над строкой с номером (выравнивание по центру), и под ней.
+    for (const o of orphans) {
+      const below = drafts.filter((d) => d.y < o.y).sort((a, b) => b.y - a.y)[0];
+      const above = drafts.filter((d) => d.y > o.y).sort((a, b) => a.y - b.y)[0];
+      const ref = below ?? above;
+      if (!ref) continue;
+      const parts = o.items.filter((i) => i.x >= ref.nameX - 3 && i.x < ref.qtyX - 2).map((i) => i.str.trim());
+      if (!parts.length) continue;
+      const toBelow = below && (!above || o.y - below.y <= above.y - o.y + 1.5);
+      if (toBelow) below!.pre.push(...parts); // строки сверху идут по порядку (сверху вниз)
+      else above!.name.push(...parts);
+    }
+    for (const d of drafts) if (d.name.length || d.pre.length) rows.push({ n: d.n, name: [...d.pre, ...d.name].join(" ").replace(/\s+/g, " ").trim(), unit: d.unit, qty: d.qty, price: d.price, sum: d.sum });
   }
   return {
     kind: "order",
