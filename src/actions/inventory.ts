@@ -95,6 +95,7 @@ export async function recordPurchase(id: string, formData: FormData) {
       where: { id },
       data: {
         quantity: item.quantity + quantity,
+        ...(item.countable ? {} : { level: "PLENTY" as const }), // нельзя посчитать — после покупки «много»
         lastPurchaseDate: date,
         lastPurchasePrice: price ?? item.lastPurchasePrice,
         currentPrice: price ?? item.currentPrice,

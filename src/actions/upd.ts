@@ -57,7 +57,7 @@ export async function importUpd(json: string): Promise<{ ok: boolean; message: s
       await tx.inventoryItem.update({
         where: { id: itemId },
         data: {
-          ...(r.addQty || r.target === "new" ? { quantity: item.quantity + r.qty } : {}),
+          ...(r.addQty || r.target === "new" ? { quantity: item.quantity + r.qty, ...(item.countable ? {} : { level: "PLENTY" as const }) } : {}),
           lastPurchaseDate: !item.lastPurchaseDate || item.lastPurchaseDate < date ? date : item.lastPurchaseDate,
           lastPurchasePrice: price,
           currentPrice: price,

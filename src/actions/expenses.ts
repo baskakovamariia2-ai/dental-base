@@ -66,7 +66,8 @@ export async function addLinkPurchase(formData: FormData) {
       await tx.purchase.create({ data: { itemId: item.id, date, quantity, price, supplierId: supplier.id, comment: url ? `${shop}: ${url}` : shop } });
       await tx.inventoryItem.update({
         where: { id: item.id },
-        data: { quantity: item.quantity + quantity, lastPurchaseDate: date, lastPurchasePrice: price, currentPrice: price, url: item.url ?? url },
+        // нельзя посчитать (вата, вазелин) — после покупки «много»
+        data: { quantity: item.quantity + quantity, ...(item.countable ? {} : { level: "PLENTY" as const }), lastPurchaseDate: date, lastPurchasePrice: price, currentPrice: price, url: item.url ?? url },
       });
     });
     revalidatePath("/inventory");
