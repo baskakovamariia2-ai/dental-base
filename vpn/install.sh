@@ -2,6 +2,7 @@
 # Свой VPN (Xray, VLESS + Reality) на чистом сервере Ubuntu/Debian.
 # Запуск: curl -fsSL https://raw.githubusercontent.com/baskakovamariia2-ai/dental-base/main/vpn/install.sh | bash
 # Повторный запуск ничего не ломает — просто снова покажет ссылку для телефона.
+# Отдельная ссылка для члена семьи:  ... | bash -s add Мама   (у каждого своя, любую можно отключить)
 set -e
 LINK_FILE=/root/vpn-link.txt
 SNI=www.microsoft.com
@@ -24,7 +25,23 @@ if [ "$(id -u)" != "0" ]; then echo "Нужно войти как root"; exit 1;
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq curl openssl qrencode ca-certificates >/dev/null
+apt-get install -y -qq curl openssl qrencode ca-certificates python3 >/dev/null
+
+if [ "$1" = "add" ] && [ -s "$LINK_FILE" ]; then
+  NAME=$(echo "${2:-Family}" | tr -cd '[:alnum:]_-' ); [ -z "$NAME" ] && NAME="Family$(date +%s)"
+  NEW=$(xray uuid)
+  python3 - "$NEW" <<'PY'
+import json, sys
+p = "/usr/local/etc/xray/config.json"
+c = json.load(open(p))
+c["inbounds"][0]["settings"]["clients"].append({"id": sys.argv[1], "flow": "xtls-rprx-vision"})
+json.dump(c, open(p, "w"), indent=2)
+PY
+  systemctl restart xray
+  sed -E "s#^vless://[^@]+@#vless://$NEW@#; s/#.*$/#$NAME/" "$LINK_FILE" > "/root/vpn-link-$NAME.txt"
+  echo; echo "Ссылка для «$NAME»:"; qrencode -t ansiutf8 < "/root/vpn-link-$NAME.txt"; echo; cat "/root/vpn-link-$NAME.txt"; echo
+  exit 0
+fi
 
 if [ -s "$LINK_FILE" ] && systemctl is-active --quiet xray; then show; exit 0; fi
 
