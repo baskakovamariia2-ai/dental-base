@@ -6,6 +6,7 @@ import { addDays, sameDay, startOfDay, startOfMonth } from "@/lib/dates";
 import { fmtDate, fmtDateLong } from "@/lib/format";
 import { addTask, toggleTask } from "@/actions/tasks";
 import { AppointmentRow } from "@/components/appointment-row";
+import { backfillCleaningRecallsOnce, recallLabel, recallState } from "@/lib/recall";
 import { Empty, Stat } from "@/components/ui";
 import { IconBox, IconCalendar, IconPlus, IconTooth, IconUsers } from "@/components/icons";
 
@@ -13,6 +14,7 @@ export default async function Dashboard() {
   const user = await requireUser();
   const now = new Date();
   const today = startOfDay(now);
+  await backfillCleaningRecallsOnce().catch((e) => console.error("recall backfill", e));
 
   // Ближайший приёмный день: сегодня, если есть записи, иначе следующий день с записями
   const nextAp = await prisma.appointment.findFirst({
@@ -21,7 +23,13 @@ export default async function Dashboard() {
   });
   const day = nextAp ? startOfDay(nextAp.startsAt) : today;
 
-  const [dayAps, tasks, total, newThisMonth, active, tpl] = await Promise.all([
+  const [recalls, dayAps, tasks, total, newThisMonth, active, tpl] = await Promise.all([
+    prisma.patient.findMany({
+      where: { archivedAt: null, recallDate: { lte: addDays(today, 7) } },
+      select: { id: true, lastName: true, firstName: true, recallDate: true, recallNote: true },
+      orderBy: { recallDate: "asc" },
+      take: 10,
+    }),
     prisma.appointment.findMany({
       where: { startsAt: { gte: day, lt: addDays(day, 1) } },
       include: { patient: true, doctor: true },
@@ -74,6 +82,28 @@ export default async function Dashboard() {
           </div>
         )}
       </section>
+
+      {recalls.length > 0 && (
+        <section>
+          <div className="mb-3 flex items-baseline justify-between">
+            <h2 className="section-title mb-0">🔔 Пора связаться · {recalls.length}</h2>
+            <Link href="/patients?filter=recall" className="text-sm text-accent">Все</Link>
+          </div>
+          <div className="card divide-y divide-zinc-100">
+            {recalls.map((p) => (
+              <Link key={p.id} href={`/patients/${p.id}`} className="flex items-center gap-3 px-4 py-3 hover:bg-zinc-50">
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[15px] font-medium">{p.lastName} {p.firstName}</span>
+                  <span className="block truncate text-xs text-ink-mute">{p.recallNote || "Связаться"}</span>
+                </span>
+                <span className={`shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium ${recallState(p.recallDate) === "due" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-800"}`}>
+                  {p.recallDate ? recallLabel(p.recallDate) : ""}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section>
         <h2 className="section-title">Задачи</h2>

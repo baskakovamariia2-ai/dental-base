@@ -2,6 +2,7 @@ import { prisma } from "./db";
 import { attachDefaultConsumables, isTracked, lineCost, loadProcedures, matchProcedure } from "./consumables";
 import { syncToothWithPlan } from "./plan";
 import { isValidTooth } from "./teeth";
+import { autoRecallAfterVisit } from "./recall";
 
 /**
  * Завершить запись: процедура попадает в план как выполненная (и оплаченная наличными),
@@ -57,6 +58,7 @@ export async function completeAppointment(id: string) {
   await attachDefaultConsumables(visit.id, a.procedure);
   if (itemId) await prisma.treatmentItem.update({ where: { id: itemId }, data: { visitId: visit.id } });
   await syncToothWithPlan(a.patientId, tooth);
+  await autoRecallAfterVisit(a.patientId, a.procedure, a.startsAt);
 }
 
 const isConsultation = (procedure: string) => /^консультац|^осмотр|^контрол/i.test(procedure.trim());

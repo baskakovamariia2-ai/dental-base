@@ -77,6 +77,8 @@ model Patient {
   priceListId    String?
   priceList      PriceList?     @relation(fields: [priceListId], references: [id], onDelete: SetNull)
   isDemo         Boolean        @default(false)
+  recallDate     DateTime? // «связаться / записать» к этой дате (например, чистка через 6 месяцев)
+  recallNote     String?
   archivedAt     DateTime?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
@@ -93,6 +95,7 @@ model Patient {
   @@index([lastName, firstName])
   @@index([phone])
   @@index([archivedAt])
+  @@index([recallDate])
 }
 
 // ───────────── Расписание ─────────────

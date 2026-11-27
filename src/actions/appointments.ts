@@ -7,6 +7,7 @@ import { requireUser } from "@/lib/auth";
 import { int, oneOf, optInt, optStr, safeReturn, str } from "@/lib/forms";
 import { addDays, parseISODate, parseInputDateTime, toISODate } from "@/lib/dates";
 import { completeAppointment, resyncCompletedAppointment } from "@/lib/appointments";
+import { clearRecallOnBooking } from "@/lib/recall";
 import { unconfirmedVisitsOn } from "@/lib/consumables";
 import { trackedItems } from "@/lib/consumables";
 import { isValidTooth } from "@/lib/teeth";
@@ -49,6 +50,7 @@ export async function createAppointment(formData: FormData) {
     if (!it || it.patientId !== patientId) data.treatmentItemId = null;
   }
   await prisma.appointment.create({ data: { ...data, startsAt: data.startsAt, patientId } });
+  await clearRecallOnBooking(patientId, data.startsAt);
   revalidatePath("/", "layout");
   redirect(`/schedule?view=day&date=${toISODate(data.startsAt)}`);
 }

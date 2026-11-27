@@ -11,6 +11,7 @@ import { applyCrownRules, applyEndoRules, fillMissingPrices, moveItemNotesToTeet
 import { getSettings } from "@/lib/settings";
 import { buildStages } from "@/lib/stages";
 import { ReminderButton } from "@/components/reminder-button";
+import { RecallBox } from "@/components/recall-box";
 import { fileSize, fmtDate, fmtDateTime, fullName, initials, money, phoneHref, telegramHref } from "@/lib/format";
 import { toISODate } from "@/lib/dates";
 import { FILE_CATEGORY, PATIENT_SOURCE_ALL, PATIENT_STATUS, TOOTH_STATUS, TREATMENT_STATUS, findOpt } from "@/lib/labels";
@@ -145,6 +146,8 @@ export default async function PatientPage({
         {patient.phone && <a href={phoneHref(patient.phone)} className="btn-secondary shrink-0"><IconPhone /> Позвонить</a>}
         <Link href={`/patients/${patient.id}/edit`} className="btn-secondary shrink-0">Изменить</Link>
       </div>
+
+      <RecallBox patientId={patient.id} date={patient.recallDate} note={patient.recallNote} />
 
       {/* Вкладки */}
       <nav className="-mx-4 mb-5 flex gap-1 overflow-x-auto border-b border-zinc-200 px-4 [scrollbar-width:none]">
