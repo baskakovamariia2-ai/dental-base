@@ -195,7 +195,6 @@ export default async function InventoryPage({
           {[
             { kind: "inventory", label: "Склад" },
             { kind: "procedures", label: "Себестоимость процедур" },
-            { kind: "visits", label: "Приёмы и расходники (3 месяца, с именами пациентов)" },
           ].map((f) => (
             <label key={f.kind} className="block">
               <span className="label">{f.label}</span>

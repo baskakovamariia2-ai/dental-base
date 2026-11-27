@@ -5,7 +5,7 @@ import { isLowItem, isTracked, lineCost, loadProcedures, procedureCost, unitPric
 
 export const dynamic = "force-dynamic";
 
-// Данные для Google Таблицы: =IMPORTDATA("…/api/export/inventory?key=…"; ","; "en_US")
+// Данные для Google Таблицы (только склад и себестоимость — данные пациентов в Google не уходят): =IMPORTDATA("…/api/export/inventory?key=…"; ","; "en_US")
 export async function GET(req: Request, { params }: { params: Promise<{ kind: string }> }) {
   const url = new URL(req.url);
   if (!(await checkExportKey(url.searchParams.get("key")))) return new Response("Forbidden", { status: 403 });
@@ -40,26 +40,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
       }
       rows.push([p.name, "ИТОГО", "", "", "", procedureCost(p).total, ""]);
       rows.push(["", "", "", "", "", "", ""]);
-    }
-  } else if (kind === "visits") {
-    const from = new Date();
-    from.setMonth(from.getMonth() - 3);
-    const visits = await prisma.visit.findMany({
-      where: { date: { gte: from }, OR: [{ source: null }, { source: { not: "plan" } }] },
-      include: { patient: { select: { lastName: true, firstName: true } }, procedureTpl: true, consumables: true },
-      orderBy: { date: "desc" },
-    });
-    rows.push(["Дата", "Пациент", "Процедура", "Цена приёма, ₽", "Расходники, ₽", "Подтверждено", "Что подтвердили"]);
-    for (const v of visits) {
-      rows.push([
-        v.date.toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric", timeZone: "Europe/Moscow" }).replace(" г.", ""),
-        `${v.patient.lastName} ${v.patient.firstName}`,
-        v.procedureTpl?.name ?? v.reason ?? "",
-        v.cost,
-        v.consumablesCost ?? "",
-        v.consumablesConfirmed ? "да" : v.procedureId ? "нет" : "",
-        v.consumables.map((c) => `${c.name} × ${c.qty}`).join("; "),
-      ]);
     }
   } else {
     return new Response("Not found", { status: 404 });
