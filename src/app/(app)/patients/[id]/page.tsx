@@ -48,13 +48,20 @@ export default async function PatientPage({
   const openTooth = isValidTooth(Number(toothParam)) ? Number(toothParam) : null;
   const now = new Date();
   // цены из прайса подставляются в план автоматически (где цена ещё не указана)
-  await moveItemNotesToTeeth(id);
-  await applyEndoRules(id);
-  await fillMissingPrices({ patientIds: [id] });
-  await applyCrownRules(id);
-  await recordDoneItems(id);
-  await syncPhotoTeeth(id);
+  // план (по очереди — правила зависят друг от друга) и фото (независимо) — параллельно
+  await Promise.all([
+    (async () => {
+      await moveItemNotesToTeeth(id);
+      await applyEndoRules(id);
+      await fillMissingPrices({ patientIds: [id] });
+      await applyCrownRules(id);
+      await recordDoneItems(id);
+    })(),
+    syncPhotoTeeth(id),
+  ]);
 
+  const priceListsP = prisma.priceList.findMany({ orderBy: { createdAt: "asc" }, include: { items: { orderBy: { sortOrder: "asc" } } } });
+  const extrasP = Promise.all([getReminderTemplate(), getSettings()]);
   const patient = await prisma.patient.findUnique({
     where: { id },
     include: {
@@ -72,10 +79,10 @@ export default async function PatientPage({
   });
   if (!patient) notFound();
 
-  const priceLists = await prisma.priceList.findMany({ orderBy: { createdAt: "asc" }, include: { items: { orderBy: { sortOrder: "asc" } } } });
+  const priceLists = await priceListsP;
   const effectiveList = patient.priceList ?? priceLists.find((l) => l.isDefault) ?? null;
   const priceOptions: PriceOption[] = (effectiveList?.items ?? []).map((i) => ({ name: i.name, price: i.price }));
-  const [tpl, settings] = await Promise.all([getReminderTemplate(), getSettings()]);
+  const [tpl, settings] = await extrasP;
 
   const stats = patientStats(patient.teeth, patient.treatmentItems);
   const st = findOpt(PATIENT_STATUS, patient.status);
