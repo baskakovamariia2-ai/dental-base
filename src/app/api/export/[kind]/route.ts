@@ -15,7 +15,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
   if (kind === "inventory") {
     const items = await prisma.inventoryItem.findMany({ where: { archivedAt: null }, orderBy: [{ category: "asc" }, { name: "asc" }] });
     const level = (v: string | null) => (v ? findOpt(STOCK_LEVEL, v as "ENOUGH").label.toLowerCase() : "");
-    rows.push(["Раздел", "Группа", "Наименование", "Кол-во", "Ед.", "Открытая упаковка", "Считаем после приёма", "Цена за ед., ₽", "Пора заказать", "В закупке", "Ссылка", "Комментарий"]);
+    rows.push(["Раздел", "Группа", "Наименование", "Кол-во", "Ед.", "Открытая упаковка", "Считаем после приёма", "Цена за ед., ₽", "Пора заказать", "Ссылка", "Комментарий"]);
     for (const i of items) {
       rows.push([
         i.category === "INSTRUMENTS" ? "Инструменты" : "Расходники",
@@ -27,7 +27,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
         i.trackPerVisit ? "да" : "",
         i.currentPrice ?? i.lastPurchasePrice ?? "",
         isLowItem(i) ? "мало" : "",
-        i.toBuyQuantity ?? "",
         i.url ?? "",
         i.comment ?? "",
       ]);
@@ -53,7 +52,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
     rows.push(["Дата", "Пациент", "Процедура", "Цена приёма, ₽", "Расходники, ₽", "Подтверждено", "Что подтвердили"]);
     for (const v of visits) {
       rows.push([
-        v.date.toISOString().slice(0, 10),
+        v.date.toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric", timeZone: "Europe/Moscow" }).replace(" г.", ""),
         `${v.patient.lastName} ${v.patient.firstName}`,
         v.procedureTpl?.name ?? v.reason ?? "",
         v.cost,

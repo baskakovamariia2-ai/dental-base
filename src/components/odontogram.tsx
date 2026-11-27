@@ -257,7 +257,7 @@ function ToothSheet({
               {photos.map((f) => (
                 <Link key={f.id} href={`/patients/${patientId}/photo/${f.id}`} className="relative block h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-zinc-100">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={`/api/files/${f.id}`} alt="" loading="lazy" className="h-20 w-20 object-cover" />
+                  <img src={`/api/files/${f.id}?thumb`} alt="" loading="lazy" decoding="async" className="h-20 w-20 object-cover" />
                 </Link>
               ))}
             </div>

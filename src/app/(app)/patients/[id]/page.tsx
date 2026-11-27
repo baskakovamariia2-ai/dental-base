@@ -553,7 +553,7 @@ function Thumb({ patientId, f, size = "grid" }: { patientId: string; f: PhotoFil
       className={`relative block shrink-0 overflow-hidden rounded-xl bg-zinc-100 ${size === "strip" ? "h-20 w-20" : ""}`}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={`/api/files/${f.id}`} alt={f.title} loading="lazy" className={size === "strip" ? "h-20 w-20 object-cover" : "aspect-square w-full object-cover"} />
+      <img src={`/api/files/${f.id}?thumb`} alt={f.title} loading="lazy" decoding="async" className={size === "strip" ? "h-20 w-20 object-cover" : "aspect-square w-full object-cover"} />
       {size === "grid" && (
         <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-2 pb-1.5 pt-4 text-[10px] leading-tight text-white">
           {photoCaption(f) && <div className="font-semibold">{photoCaption(f)}</div>}

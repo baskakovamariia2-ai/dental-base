@@ -28,4 +28,5 @@ export async function removeFile(key: string) {
   } catch {
     /* уже удалён */
   }
+  await unlink(filePath(key) + ".thumb.jpg").catch(() => {});
 }
