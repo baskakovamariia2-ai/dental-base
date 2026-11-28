@@ -47,8 +47,8 @@ export async function shiftFor(date: string): Promise<ShiftDay | null> {
 
 export type FreeWindow = { from: Date; to: Date; minutes: number };
 
-/** Свободные окна внутри смены (любые, от 5 минут) */
-export function freeWindows(shift: { date: string; start: string; end: string }, aps: Ap[], minMinutes = 5): FreeWindow[] {
+/** Свободные окна внутри смены (от 20 минут) */
+export function freeWindows(shift: { date: string; start: string; end: string }, aps: Ap[], minMinutes = 20): FreeWindow[] {
   const start = atTime(shift.date, shift.start);
   const end = atTime(shift.date, shift.end);
   const busy = aps

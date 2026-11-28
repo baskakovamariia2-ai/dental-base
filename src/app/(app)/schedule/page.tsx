@@ -2,8 +2,6 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { getReminderTemplate } from "@/lib/reminder";
-import { earningsByDay } from "@/lib/earnings";
-import { money } from "@/lib/format";
 import { addDays, addMonths, parseISODate, sameDay, startOfDay, startOfMonth, startOfWeek, toISODate } from "@/lib/dates";
 import { fmtDateLong, fmtTime, fullName } from "@/lib/format";
 import { apStatusOpt } from "@/lib/labels";
@@ -14,6 +12,7 @@ import { dayText } from "@/lib/tg-schedule";
 import { freeWindows, shiftDays, totalFree, durationText, type FreeWindow, type ShiftDay } from "@/lib/shifts";
 import { removeShift, saveShift } from "@/actions/shifts";
 import { ShareSchedule } from "@/components/share-schedule";
+import { FreeRow, byTime } from "@/components/free-row";
 
 type View = "upcoming" | "day" | "week" | "month";
 const WD = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
@@ -51,15 +50,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   const [tpl, shifts] = await Promise.all([getReminderTemplate(), shiftDays(from, to)]);
   const apsOn = (d: string) => aps.filter((a) => toISODate(a.startsAt) === d);
   // текст для «Отправить в Telegram» — в том же виде, что пишет бот
-  const shareText =
-    view === "day"
-      ? await dayText(toISODate(date), shifts.get(toISODate(date)) ?? null, false)
-      : view === "upcoming"
-        ? (await Promise.all([...shifts.keys()].filter((d) => d < toISODate(addDays(today, 31))).sort().map((d) => dayText(d, shifts.get(d)!, false)))).join("\n\n")
-        : "";
-  const earnDay = view === "day" ? date : today;
-  const [earn] = await earningsByDay(earnDay, addDays(earnDay, 1));
-  const earnTitle = sameDay(earnDay, today) ? "Заработано сегодня" : `Заработано ${earnDay.toLocaleDateString("ru-RU", { day: "numeric", month: "long" })}`;
+  const shareText = view === "day" ? await dayText(toISODate(date), shifts.get(toISODate(date)) ?? null, false) : "";
   const link = (v: View, d: Date) => (v === "upcoming" ? "/schedule" : `/schedule?view=${v}&date=${toISODate(d)}`);
   const returnTo = link(view, date);
 
@@ -69,21 +60,6 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
         title="Расписание"
         action={<Link href={`/schedule/new?date=${toISODate(view === "day" ? date : today)}`} className="btn-accent"><IconPlus /> <span className="hidden sm:inline">Новая запись</span></Link>}
       />
-
-      <Link href="/earnings" className="card mb-4 flex items-center gap-3 px-4 py-3 hover:ring-accent/30">
-        <span className="min-w-0 flex-1">
-          <span className="block text-[13px] text-ink-soft">{earnTitle}</span>
-          <span className="block text-xl font-semibold tabular-nums">{money(earn?.revenue ?? 0)}</span>
-        </span>
-        {earn && (
-          <span className="text-right text-xs text-ink-mute">
-            минус аренда и стерилизация {money(earn.rent + earn.sterilization)}
-            <span className={`block text-[15px] font-semibold tabular-nums ${earn.net < 0 ? "text-rose-600" : "text-emerald-700"}`}>
-              чистыми {money(earn.net)}
-            </span>
-          </span>
-        )}
-      </Link>
 
       <div className="mb-4 flex rounded-xl bg-zinc-200/60 p-1">
         {(["upcoming", "day", "week", "month"] as View[]).map((v) => (
@@ -106,32 +82,23 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
 
       {view === "upcoming" && (() => {
         const days = [...new Set([...shifts.keys(), ...aps.map((a) => toISODate(a.startsAt))])].sort();
-        const soon = days.filter((d) => d < toISODate(addDays(today, 31)));
         return days.length === 0 ? (
           <Empty>Предстоящих записей нет. <Link className="text-accent" href="/schedule/new">Добавить запись</Link></Empty>
         ) : (
           <div className="space-y-5">
-            {soon.length > 0 && (
-              <ShareSchedule
-                label="📤 Отправить расписание на месяц в Telegram"
-                text={shareText}
-              />
-            )}
             {days.map((d) => {
               const list = apsOn(d);
               const dd = parseISODate(d)!;
               const sh = shifts.get(d) ?? null;
-              const free = sh ? freeWindows(sh, list) : [];
+              const free = sh && dd >= today ? freeWindows(sh, list) : [];
               return (
                 <section key={d}>
                   <Link href={link("day", dd)} className="mb-2 flex items-baseline gap-2 px-1 text-sm font-semibold text-ink-soft">
                     <span className="capitalize">{sameDay(dd, today) ? "Сегодня, " : ""}{fmtDateLong(dd)}</span>
                     <span>· {list.length}</span>
-                    {sh && <span className="ml-auto rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">смена {sh.start}–{sh.end}</span>}
                   </Link>
                   <div className="card divide-y divide-zinc-100">
-                    {list.map((a) => <AppointmentRow key={a.id} a={a} returnTo="/schedule" reminderTemplate={tpl} />)}
-                    {free.length > 0 && <FreeSummary date={d} free={free} empty={list.length === 0} />}
+                    {byTime(list, free).map((r) => (r.a ? <AppointmentRow key={r.a.id} a={r.a} returnTo="/schedule" reminderTemplate={tpl} /> : <FreeRow key={r.t} date={d} w={r.w!} />))}
                   </div>
                   {sameDay(dd, today) && <CompleteDayButton date={d} count={list.filter((a) => !["CANCELLED", "NO_SHOW", "DONE"].includes(a.status)).length} />}
                 </section>
@@ -145,8 +112,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
         const d = toISODate(date);
         const sh = shifts.get(d) ?? null;
         const free = sh && date >= today ? freeWindows(sh, aps) : [];
-        type Row = { t: number; a?: AppointmentWith; w?: FreeWindow };
-        const rows: Row[] = [...aps.map((a) => ({ t: a.startsAt.getTime(), a })), ...free.map((w) => ({ t: w.from.getTime(), w }))].sort((x, y) => x.t - y.t);
+        const rows = byTime(aps, free);
         return (
           <div className="space-y-3">
             <ShiftCard date={d} shift={sh} free={free} />
@@ -245,26 +211,6 @@ function CompleteDayButton({ date, count }: { date: string; count: number }) {
   return (
     <Link href={`/schedule/report?date=${date}`} className="btn-primary mt-2 w-full">
       📝 Отчёт и завершить смену ({count})
-    </Link>
-  );
-}
-
-function FreeRow({ date, w }: { date: string; w: FreeWindow }) {
-  return (
-    <div className="flex items-center gap-3 bg-emerald-50/60 px-4 py-3">
-      <span className="min-w-0 flex-1 text-[15px] text-emerald-800">
-        🟢 Свободно {fmtTime(w.from)}–{fmtTime(w.to)} <span className="text-sm text-emerald-700/80">· {durationText(w.minutes)}</span>
-      </span>
-      <Link href={`/schedule/new?date=${date}&time=${fmtTime(w.from)}`} className="shrink-0 rounded-xl bg-white px-3 py-1.5 text-sm font-medium text-emerald-700 ring-1 ring-emerald-200">Записать</Link>
-    </div>
-  );
-}
-
-function FreeSummary({ date, free, empty }: { date: string; free: FreeWindow[]; empty: boolean }) {
-  return (
-    <Link href={`/schedule/new?date=${date}&time=${fmtTime(free[0].from)}`} className="block bg-emerald-50/60 px-4 py-2.5 text-sm text-emerald-800">
-      🟢 {empty ? "Пока никого. " : ""}Свободно: {free.map((w) => `${fmtTime(w.from)}–${fmtTime(w.to)}`).join(", ")}
-      <span className="text-emerald-700/80"> · всего {durationText(totalFree(free))}</span>
     </Link>
   );
 }

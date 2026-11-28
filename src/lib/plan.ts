@@ -1,3 +1,4 @@
+import { autoRecallAfterVisit } from "./recall";
 import type { ToothStatus, TreatmentStatus } from "@prisma/client";
 import { prisma } from "./db";
 import { CROWN_PARTS, DEFAULT_RESTORATION_PRICE, ENDO_RESTORATION, FOUR_CANAL_NOTE, FOUR_CANAL_PRICE, canalCount, crownPartName, doneToothStatus, findPrice, isEndo, restorationPrice, splitCrownPrice } from "./treatments";
@@ -199,6 +200,7 @@ export async function recordDoneItems(patientId: string) {
       },
     });
     await prisma.treatmentItem.update({ where: { id: it.id }, data: { visitId: visit.id, paid: Math.max(it.paid, it.price) } });
+    await autoRecallAfterVisit(patientId, it.treatment, visit.date);
   }
 }
 

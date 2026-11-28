@@ -7,13 +7,12 @@ import { fmtDate, initials } from "@/lib/format";
 import { PATIENT_STATUS, findOpt } from "@/lib/labels";
 import { Badge, Empty, PageHeader } from "@/components/ui";
 import { IconPlus, IconSearch } from "@/components/icons";
-import { recallLabel, recallState } from "@/lib/recall";
-import { addDays, startOfDay } from "@/lib/dates";
+import { backfillCleaningRecallsOnce, recallLabel, recallState } from "@/lib/recall";
 
 const FILTERS = [
   { key: "", label: "Все" },
-  { key: "recall", label: "🔔 Связаться" },
   { key: "active", label: "Активное лечение" },
+  { key: "recall", label: "🔔 Связаться" },
   { key: "completed", label: "Лечение завершено" },
   { key: "longago", label: "Давно не был" },
   { key: "new", label: "Новые" },
@@ -24,6 +23,7 @@ const FILTERS = [
 export default async function PatientsPage({ searchParams }: { searchParams: Promise<{ q?: string; filter?: string }> }) {
   await requireUser();
   const { q = "", filter = "" } = await searchParams;
+  await backfillCleaningRecallsOnce().catch((e) => console.error("recall backfill", e));
   const now = new Date();
   const halfYearAgo = new Date(now.getFullYear(), now.getMonth() - 6, now.getDate());
 
@@ -48,7 +48,7 @@ export default async function PatientsPage({ searchParams }: { searchParams: Pro
   if (filter === "active") where.status = "IN_TREATMENT";
   if (filter === "completed") where.status = "COMPLETED";
   if (filter === "new") where.status = "NEW";
-  if (filter === "recall") where.recallDate = { lte: addDays(startOfDay(now), 31) };
+  if (filter === "recall") where.recallDate = { not: null };
 
   const list = await prisma.patient.findMany({
     where,
@@ -104,7 +104,7 @@ export default async function PatientsPage({ searchParams }: { searchParams: Pro
       </div>
 
       {rows.length === 0 ? (
-        <Empty>{q ? "Никого не нашли" : filter === "recall" ? "В ближайший месяц никому не нужно звонить" : "Пока нет пациентов"}</Empty>
+        <Empty>{q ? "Никого не нашли" : filter === "recall" ? "Пока некому звонить" : "Пока нет пациентов"}</Empty>
       ) : (
         <div className="card divide-y divide-zinc-100 overflow-hidden">
           <div className="hidden grid-cols-[1fr_130px_150px_150px] gap-4 px-4 py-2.5 text-xs font-medium text-ink-mute md:grid">
@@ -128,7 +128,7 @@ export default async function PatientsPage({ searchParams }: { searchParams: Pro
                       {p.isDemo && <span className="ml-1.5 text-[10px] font-semibold text-amber-600">DEMO</span>}
                     </span>
                     <span className="block truncate text-xs text-ink-mute md:hidden">
-                      {filter === "recall" && p.recallNote ? p.recallNote : p.nextVisit ? `Запись ${fmtDate(p.nextVisit)}` : p.lastVisit ? `Был ${fmtDate(p.lastVisit)}` : p.phone ?? ""}
+                      {filter === "recall" && p.recallDate ? `${p.recallNote || "Связаться"} · ${p.recallDate.toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric", timeZone: "Europe/Moscow" })}` : p.nextVisit ? `Запись ${fmtDate(p.nextVisit)}` : p.lastVisit ? `Был ${fmtDate(p.lastVisit)}` : p.phone ?? ""}
                     </span>
                     <span className="hidden text-xs text-ink-mute md:block">{p.phone}</span>
                   </span>
@@ -137,8 +137,8 @@ export default async function PatientsPage({ searchParams }: { searchParams: Pro
                 <span className="hidden text-sm text-ink-soft md:block">{fmtDate(p.nextVisit)}</span>
                 <span className="flex shrink-0 flex-col items-end gap-1">
                   <Badge cls={st.cls}>{st.label}</Badge>
-                  {p.recallDate && recallState(p.recallDate) !== "later" && (
-                    <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium ${recallState(p.recallDate) === "due" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-800"}`}>
+                  {p.recallDate && (filter === "recall" || recallState(p.recallDate) !== "later") && (
+                    <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium ${recallState(p.recallDate) === "due" ? "bg-red-50 text-red-700" : recallState(p.recallDate) === "soon" ? "bg-amber-50 text-amber-800" : "bg-zinc-100 text-ink-soft"}`}>
                       🔔 {recallLabel(p.recallDate)}
                     </span>
                   )}

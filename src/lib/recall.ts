@@ -52,21 +52,34 @@ export async function clearRecallOnBooking(patientId: string, startsAt: Date) {
 
 /**
  * Один раз: тем, кто уже был на чистке, ставим «Записать на чистку» через 6 месяцев после последней.
+ * Ищем чистку везде: в истории приёмов, в прошедших записях и в выполненных пунктах плана.
  * Не трогаем тех, у кого напоминание уже стоит или есть будущая запись.
  */
 export async function backfillCleaningRecallsOnce() {
-  const key = "migr:recall-cleaning-1";
+  const key = "migr:recall-cleaning-2";
   if (await prisma.setting.findUnique({ where: { key } })) return;
   await prisma.setting.create({ data: { key, value: new Date().toISOString() } }).catch(() => null);
-  const visits = await prisma.visit.findMany({
-    where: { OR: [{ source: null }, { source: { not: "plan" } }], patient: { archivedAt: null, recallDate: null } },
-    select: { patientId: true, date: true, reason: true, workDone: true },
-    orderBy: { date: "desc" },
-  });
+  const now = new Date();
+  const free = { archivedAt: null, recallDate: null };
+  const [visits, aps, items] = await Promise.all([
+    prisma.visit.findMany({ where: { patient: free }, select: { patientId: true, date: true, reason: true, workDone: true } }),
+    prisma.appointment.findMany({
+      where: { patient: free, startsAt: { lt: now }, status: { notIn: ["CANCELLED", "NO_SHOW"] } },
+      select: { patientId: true, startsAt: true, procedure: true },
+    }),
+    prisma.treatmentItem.findMany({ where: { patient: free, status: "DONE" }, select: { patientId: true, updatedAt: true, treatment: true } }),
+  ]);
   const last = new Map<string, Date>();
-  for (const v of visits) if (!last.has(v.patientId) && isCleaning(`${v.reason ?? ""} ${v.workDone ?? ""}`)) last.set(v.patientId, v.date);
+  const note = (id: string, d: Date, text: string) => {
+    if (!isCleaning(text)) return;
+    const cur = last.get(id);
+    if (!cur || d > cur) last.set(id, d);
+  };
+  for (const v of visits) note(v.patientId, v.date, `${v.reason ?? ""} ${v.workDone ?? ""}`);
+  for (const a of aps) note(a.patientId, a.startsAt, a.procedure);
+  for (const i of items) note(i.patientId, i.updatedAt, i.treatment);
   for (const [patientId, date] of last) {
-    const future = await prisma.appointment.count({ where: { patientId, startsAt: { gte: new Date() }, status: { notIn: ["CANCELLED", "NO_SHOW"] } } });
+    const future = await prisma.appointment.count({ where: { patientId, startsAt: { gte: now }, status: { notIn: ["CANCELLED", "NO_SHOW"] } } });
     if (future) continue;
     await prisma.patient.update({ where: { id: patientId }, data: { recallDate: addMonths(date, 6), recallNote: "Записать на чистку" } });
   }

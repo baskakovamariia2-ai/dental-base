@@ -2,10 +2,12 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { getReminderTemplate } from "@/lib/reminder";
-import { addDays, sameDay, startOfDay, startOfMonth } from "@/lib/dates";
+import { addDays, sameDay, startOfDay, startOfMonth, toISODate } from "@/lib/dates";
 import { fmtDate, fmtDateLong } from "@/lib/format";
 import { addTask, toggleTask } from "@/actions/tasks";
 import { AppointmentRow } from "@/components/appointment-row";
+import { FreeRow, byTime } from "@/components/free-row";
+import { freeWindows, shiftDays } from "@/lib/shifts";
 import { backfillCleaningRecallsOnce, recallLabel, recallState } from "@/lib/recall";
 import { Empty, Stat } from "@/components/ui";
 import { IconBox, IconCalendar, IconPlus, IconTooth, IconUsers } from "@/components/icons";
@@ -49,6 +51,8 @@ export default async function Dashboard() {
     { href: "/inventory/new", label: "Добавить в инвентарь", Icon: IconBox },
   ];
 
+  const dayShift = (await shiftDays(day, addDays(day, 1))).get(toISODate(day)) ?? null;
+  const dayFree = dayShift ? freeWindows(dayShift, dayAps) : [];
   const dayTitle = sameDay(day, today) ? "Сегодня" : sameDay(day, addDays(today, 1)) ? "Завтра" : fmtDateLong(day);
 
   return (
@@ -78,7 +82,7 @@ export default async function Dashboard() {
           <Empty>Предстоящих записей нет. <Link href="/schedule/new" className="text-accent">Записать пациента</Link></Empty>
         ) : (
           <div className="card divide-y divide-zinc-100">
-            {dayAps.map((a) => <AppointmentRow key={a.id} a={a} returnTo="/" reminderTemplate={tpl} />)}
+            {byTime(dayAps, dayFree).map((r) => (r.a ? <AppointmentRow key={r.a.id} a={r.a} returnTo="/" reminderTemplate={tpl} /> : <FreeRow key={r.t} date={toISODate(day)} w={r.w!} />))}
           </div>
         )}
       </section>
