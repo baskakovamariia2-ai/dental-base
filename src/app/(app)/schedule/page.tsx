@@ -10,6 +10,9 @@ import { apStatusOpt } from "@/lib/labels";
 import { AppointmentRow, type AppointmentWith } from "@/components/appointment-row";
 import { Empty, PageHeader } from "@/components/ui";
 import { IconBack, IconChevron, IconPlus } from "@/components/icons";
+import { freeWindows, scheduleText, shiftDays, totalFree, durationText, type FreeWindow, type ShiftDay } from "@/lib/shifts";
+import { removeShift, saveShift } from "@/actions/shifts";
+import { ShareSchedule } from "@/components/share-schedule";
 
 type View = "upcoming" | "day" | "week" | "month";
 const WD = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
@@ -44,7 +47,8 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
     orderBy: { startsAt: "asc" },
   });
 
-  const tpl = await getReminderTemplate();
+  const [tpl, shifts] = await Promise.all([getReminderTemplate(), shiftDays(from, to)]);
+  const apsOn = (d: string) => aps.filter((a) => toISODate(a.startsAt) === d);
   const earnDay = view === "day" ? date : today;
   const [earn] = await earningsByDay(earnDay, addDays(earnDay, 1));
   const earnTitle = sameDay(earnDay, today) ? "Заработано сегодня" : `Заработано ${earnDay.toLocaleDateString("ru-RU", { day: "numeric", month: "long" })}`;
@@ -92,36 +96,64 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
         <div className="mb-4 text-center"><Link href={link(view, today)} className="text-sm text-accent">Сегодня</Link></div>
       )}
 
-      {view === "upcoming" &&
-        (aps.length === 0 ? (
+      {view === "upcoming" && (() => {
+        const days = [...new Set([...shifts.keys(), ...aps.map((a) => toISODate(a.startsAt))])].sort();
+        const soon = days.filter((d) => d < toISODate(addDays(today, 31)));
+        return days.length === 0 ? (
           <Empty>Предстоящих записей нет. <Link className="text-accent" href="/schedule/new">Добавить запись</Link></Empty>
         ) : (
           <div className="space-y-5">
-            {[...new Set(aps.map((a) => toISODate(a.startsAt)))].map((d) => {
-              const list = aps.filter((a) => toISODate(a.startsAt) === d);
+            {soon.length > 0 && (
+              <ShareSchedule
+                label="📤 Отправить расписание на месяц в Telegram"
+                text={scheduleText(soon.map((d) => ({ date: d, shift: shifts.get(d) ?? null, aps: apsOn(d) })))}
+              />
+            )}
+            {days.map((d) => {
+              const list = apsOn(d);
               const dd = parseISODate(d)!;
+              const sh = shifts.get(d) ?? null;
+              const free = sh ? freeWindows(sh, list) : [];
               return (
                 <section key={d}>
-                  <Link href={link("day", dd)} className="mb-2 block px-1 text-sm font-semibold capitalize text-ink-soft">
-                    {sameDay(dd, today) ? "Сегодня, " : ""}{fmtDateLong(dd)} · {list.length}
+                  <Link href={link("day", dd)} className="mb-2 flex items-baseline gap-2 px-1 text-sm font-semibold text-ink-soft">
+                    <span className="capitalize">{sameDay(dd, today) ? "Сегодня, " : ""}{fmtDateLong(dd)}</span>
+                    <span>· {list.length}</span>
+                    {sh && <span className="ml-auto rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">смена {sh.start}–{sh.end}</span>}
                   </Link>
-                  <div className="card divide-y divide-zinc-100">{list.map((a) => <AppointmentRow key={a.id} a={a} returnTo="/schedule" reminderTemplate={tpl} />)}</div>
+                  <div className="card divide-y divide-zinc-100">
+                    {list.map((a) => <AppointmentRow key={a.id} a={a} returnTo="/schedule" reminderTemplate={tpl} />)}
+                    {free.length > 0 && <FreeSummary date={d} free={free} empty={list.length === 0} />}
+                  </div>
                   {sameDay(dd, today) && <CompleteDayButton date={d} count={list.filter((a) => !["CANCELLED", "NO_SHOW", "DONE"].includes(a.status)).length} />}
                 </section>
               );
             })}
           </div>
-        ))}
+        );
+      })()}
 
-      {view === "day" &&
-        (aps.length === 0 ? (
-          <Empty>Записей нет. <Link className="text-accent" href={`/schedule/new?date=${toISODate(date)}`}>Добавить запись</Link></Empty>
-        ) : (
-          <>
-            <div className="card divide-y divide-zinc-100">{aps.map((a) => <AppointmentRow key={a.id} a={a} returnTo={returnTo} reminderTemplate={tpl} />)}</div>
-            {date <= today && <CompleteDayButton date={toISODate(date)} count={aps.filter((a) => !["CANCELLED", "NO_SHOW", "DONE"].includes(a.status)).length} />}
-          </>
-        ))}
+      {view === "day" && (() => {
+        const d = toISODate(date);
+        const sh = shifts.get(d) ?? null;
+        const free = sh && date >= today ? freeWindows(sh, aps) : [];
+        type Row = { t: number; a?: AppointmentWith; w?: FreeWindow };
+        const rows: Row[] = [...aps.map((a) => ({ t: a.startsAt.getTime(), a })), ...free.map((w) => ({ t: w.from.getTime(), w }))].sort((x, y) => x.t - y.t);
+        return (
+          <div className="space-y-3">
+            <ShiftCard date={d} shift={sh} free={free} />
+            {rows.length === 0 ? (
+              <Empty>Записей нет. <Link className="text-accent" href={`/schedule/new?date=${d}`}>Добавить запись</Link></Empty>
+            ) : (
+              <div className="card divide-y divide-zinc-100">
+                {rows.map((r) => (r.a ? <AppointmentRow key={r.a.id} a={r.a} returnTo={returnTo} reminderTemplate={tpl} /> : <FreeRow key={r.t} date={d} w={r.w!} />))}
+              </div>
+            )}
+            {(aps.length > 0 || sh) && <ShareSchedule text={scheduleText([{ date: d, shift: sh, aps }])} />}
+            {aps.length > 0 && date <= today && <CompleteDayButton date={d} count={aps.filter((a) => !["CANCELLED", "NO_SHOW", "DONE"].includes(a.status)).length} />}
+          </div>
+        );
+      })()}
 
       {view === "week" && (
         <div className="space-y-3 lg:grid lg:grid-cols-7 lg:gap-2 lg:space-y-0">
@@ -131,10 +163,15 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
               <div key={i} className="lg:min-h-[200px]">
                 <Link href={link("day", d)} className={`mb-1.5 flex items-baseline gap-2 px-1 text-sm ${sameDay(d, today) ? "font-semibold text-accent" : "text-ink-soft"}`}>
                   {WD[i]} <span className="text-ink-mute">{d.getDate()}</span>
+                  {shifts.has(toISODate(d)) && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">смена</span>}
                   <span className="ml-auto text-xs text-ink-mute lg:hidden">{list.length || ""}</span>
                 </Link>
                 <div className="space-y-1.5">
-                  {list.length === 0 && <div className="rounded-xl border border-dashed border-zinc-200 px-3 py-2 text-xs text-ink-mute lg:hidden">Свободно</div>}
+                  {list.length === 0 && (
+                    <div className={`rounded-xl border border-dashed px-3 py-2 text-xs lg:hidden ${shifts.has(toISODate(d)) ? "border-emerald-300 text-emerald-700" : "border-zinc-200 text-ink-mute"}`}>
+                      {shifts.has(toISODate(d)) ? "Смена — свободно" : "Нет смены"}
+                    </div>
+                  )}
                   {list.map((a) => <Compact key={a.id} a={a} />)}
                 </div>
               </div>
@@ -152,9 +189,11 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
             {Array.from({ length: Math.round((to.getTime() - from.getTime()) / 864e5) }, (_, i) => addDays(from, i)).map((d, i) => {
               const list = aps.filter((a) => sameDay(a.startsAt, d) && a.status !== "CANCELLED");
               const inMonth = d.getMonth() === date.getMonth();
+              const sh = shifts.get(toISODate(d));
               return (
-                <Link key={i} href={link("day", d)} className={`min-h-[64px] border-b border-r border-zinc-100 p-1.5 hover:bg-zinc-50 sm:min-h-[96px] ${inMonth ? "" : "bg-zinc-50/60 text-ink-mute"}`}>
+                <Link key={i} href={link("day", d)} className={`min-h-[64px] border-b border-r border-zinc-100 p-1.5 hover:bg-zinc-50 sm:min-h-[96px] ${sh ? "bg-emerald-50" : inMonth ? "" : "bg-zinc-50/60 text-ink-mute"}`}>
                   <div className={`mb-1 flex h-6 w-6 items-center justify-center rounded-full text-sm ${sameDay(d, today) ? "bg-ink font-semibold text-white" : ""}`}>{d.getDate()}</div>
+                  {sh && list.length === 0 && <div className="text-[11px] font-medium text-emerald-700">смена</div>}
                   {list.length > 0 && (
                     <>
                       <div className="text-[11px] font-medium text-accent sm:hidden">{list.length} зап.</div>
@@ -201,5 +240,65 @@ function CompleteDayButton({ date, count }: { date: string; count: number }) {
     <Link href={`/schedule/report?date=${date}`} className="btn-primary mt-2 w-full">
       📝 Отчёт и завершить смену ({count})
     </Link>
+  );
+}
+
+function FreeRow({ date, w }: { date: string; w: FreeWindow }) {
+  return (
+    <div className="flex items-center gap-3 bg-emerald-50/60 px-4 py-3">
+      <span className="min-w-0 flex-1 text-[15px] text-emerald-800">
+        🟢 Свободно {fmtTime(w.from)}–{fmtTime(w.to)} <span className="text-sm text-emerald-700/80">· {durationText(w.minutes)}</span>
+      </span>
+      <Link href={`/schedule/new?date=${date}&time=${fmtTime(w.from)}`} className="shrink-0 rounded-xl bg-white px-3 py-1.5 text-sm font-medium text-emerald-700 ring-1 ring-emerald-200">Записать</Link>
+    </div>
+  );
+}
+
+function FreeSummary({ date, free, empty }: { date: string; free: FreeWindow[]; empty: boolean }) {
+  return (
+    <Link href={`/schedule/new?date=${date}&time=${fmtTime(free[0].from)}`} className="block bg-emerald-50/60 px-4 py-2.5 text-sm text-emerald-800">
+      🟢 {empty ? "Пока никого. " : ""}Свободно: {free.map((w) => `${fmtTime(w.from)}–${fmtTime(w.to)}`).join(", ")}
+      <span className="text-emerald-700/80"> · всего {durationText(totalFree(free))}</span>
+    </Link>
+  );
+}
+
+function ShiftCard({ date, shift, free }: { date: string; shift: ShiftDay | null; free: FreeWindow[] }) {
+  const form = (
+    <form action={saveShift.bind(null, date)} className="mt-3 flex items-end gap-2">
+      <label className="block flex-1"><span className="label">С</span><input type="time" name="start" defaultValue={shift?.start ?? "15:00"} className="input" /></label>
+      <label className="block flex-1"><span className="label">До</span><input type="time" name="end" defaultValue={shift?.end ?? "21:00"} className="input" /></label>
+      <button className="btn-secondary">Сохранить</button>
+    </form>
+  );
+  if (!shift)
+    return (
+      <div className="card card-pad">
+        <div className="text-[15px] font-medium">Смены в этот день нет</div>
+        <p className="text-sm text-ink-mute">Если кабинет на этот день забронирован — отметьте, и день подсветится в календаре и при записи пациента.</p>
+        {form}
+      </div>
+    );
+  return (
+    <div className="rounded-2xl bg-emerald-50 p-4 ring-1 ring-emerald-200">
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="text-[15px] font-medium text-emerald-900">🗓 Смена {shift.start}–{shift.end}</div>
+          <div className="text-sm text-emerald-800/80">
+            {free.length ? `Свободно ${durationText(totalFree(free))}` : "Всё занято"}
+            {shift.booked ? " · кабинет забронирован" : ""}
+          </div>
+        </div>
+        {shift.booked && shift.count === 0 && (
+          <form action={removeShift.bind(null, date)}>
+            <button className="text-sm text-emerald-800 underline decoration-dotted underline-offset-2">Убрать смену</button>
+          </form>
+        )}
+      </div>
+      <details>
+        <summary className="mt-2 cursor-pointer list-none text-sm text-emerald-800 underline decoration-dotted underline-offset-2">Изменить часы</summary>
+        {form}
+      </details>
+    </div>
   );
 }

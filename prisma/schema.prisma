@@ -530,3 +530,13 @@ model PushSubscription {
 
   @@index([userId])
 }
+
+/// Забронированная смена (аренда кабинета) — день, куда можно записывать пациентов
+model Shift {
+  id        String   @id @default(cuid())
+  date      String   @unique // YYYY-MM-DD
+  start     String   @default("15:00")
+  end       String   @default("21:00")
+  note      String?
+  createdAt DateTime @default(now())
+}

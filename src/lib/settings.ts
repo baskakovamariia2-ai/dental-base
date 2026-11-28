@@ -4,6 +4,8 @@ export const DEFAULTS = {
   doctorName: "Баскаков Илья Васильевич",
   rentPerDay: "5000",
   sterilizationPerDay: "1000",
+  shiftStart: "15:00",
+  shiftEnd: "21:00",
 } as const;
 
 export type SettingKey = keyof typeof DEFAULTS;
