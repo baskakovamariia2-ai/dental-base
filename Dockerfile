@@ -17,7 +17,7 @@ WORKDIR /app
 
 COPY package.json ./
 COPY prisma ./prisma
-RUN npm install --no-audit --no-fund
+RUN npm install --no-audit --no-fund --fetch-retries=5 --fetch-timeout=120000
 
 COPY . .
 # кэш сборки не нужен в готовом образе — экономим место на диске сервера
