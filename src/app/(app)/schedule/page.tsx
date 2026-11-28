@@ -10,7 +10,8 @@ import { apStatusOpt } from "@/lib/labels";
 import { AppointmentRow, type AppointmentWith } from "@/components/appointment-row";
 import { Empty, PageHeader } from "@/components/ui";
 import { IconBack, IconChevron, IconPlus } from "@/components/icons";
-import { freeWindows, scheduleText, shiftDays, totalFree, durationText, type FreeWindow, type ShiftDay } from "@/lib/shifts";
+import { dayText } from "@/lib/tg-schedule";
+import { freeWindows, shiftDays, totalFree, durationText, type FreeWindow, type ShiftDay } from "@/lib/shifts";
 import { removeShift, saveShift } from "@/actions/shifts";
 import { ShareSchedule } from "@/components/share-schedule";
 
@@ -49,6 +50,13 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
 
   const [tpl, shifts] = await Promise.all([getReminderTemplate(), shiftDays(from, to)]);
   const apsOn = (d: string) => aps.filter((a) => toISODate(a.startsAt) === d);
+  // текст для «Отправить в Telegram» — в том же виде, что пишет бот
+  const shareText =
+    view === "day"
+      ? await dayText(toISODate(date), shifts.get(toISODate(date)) ?? null, false)
+      : view === "upcoming"
+        ? (await Promise.all([...shifts.keys()].filter((d) => d < toISODate(addDays(today, 31))).sort().map((d) => dayText(d, shifts.get(d)!, false)))).join("\n\n")
+        : "";
   const earnDay = view === "day" ? date : today;
   const [earn] = await earningsByDay(earnDay, addDays(earnDay, 1));
   const earnTitle = sameDay(earnDay, today) ? "Заработано сегодня" : `Заработано ${earnDay.toLocaleDateString("ru-RU", { day: "numeric", month: "long" })}`;
@@ -106,7 +114,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
             {soon.length > 0 && (
               <ShareSchedule
                 label="📤 Отправить расписание на месяц в Telegram"
-                text={scheduleText(soon.map((d) => ({ date: d, shift: shifts.get(d) ?? null, aps: apsOn(d) })))}
+                text={shareText}
               />
             )}
             {days.map((d) => {
@@ -149,7 +157,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
                 {rows.map((r) => (r.a ? <AppointmentRow key={r.a.id} a={r.a} returnTo={returnTo} reminderTemplate={tpl} /> : <FreeRow key={r.t} date={d} w={r.w!} />))}
               </div>
             )}
-            {(aps.length > 0 || sh) && <ShareSchedule text={scheduleText([{ date: d, shift: sh, aps }])} />}
+            {(aps.length > 0 || sh) && <ShareSchedule text={shareText} />}
             {aps.length > 0 && date <= today && <CompleteDayButton date={d} count={aps.filter((a) => !["CANCELLED", "NO_SHOW", "DONE"].includes(a.status)).length} />}
           </div>
         );
@@ -167,10 +175,8 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
                   <span className="ml-auto text-xs text-ink-mute lg:hidden">{list.length || ""}</span>
                 </Link>
                 <div className="space-y-1.5">
-                  {list.length === 0 && (
-                    <div className={`rounded-xl border border-dashed px-3 py-2 text-xs lg:hidden ${shifts.has(toISODate(d)) ? "border-emerald-300 text-emerald-700" : "border-zinc-200 text-ink-mute"}`}>
-                      {shifts.has(toISODate(d)) ? "Смена — свободно" : "Нет смены"}
-                    </div>
+                  {list.length === 0 && shifts.has(toISODate(d)) && (
+                    <div className="rounded-xl border border-dashed border-emerald-300 px-3 py-2 text-xs text-emerald-700 lg:hidden">Смена — свободно</div>
                   )}
                   {list.map((a) => <Compact key={a.id} a={a} />)}
                 </div>

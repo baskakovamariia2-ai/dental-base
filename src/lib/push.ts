@@ -61,6 +61,12 @@ export async function sendPush(payload: PushPayload, userId?: string) {
 
 /** «37 — Реставрация (кариес)» + зуб 37 → «кариес 37» */
 export function shortWhat(procedure: string | null | undefined, tooth: number | null | undefined) {
+  const { what: w, tooth: t } = shortParts(procedure, tooth);
+  return w ? [w, t].filter(Boolean).join(" ") : t ? `зуб ${t}` : "";
+}
+
+/** «37 — Реставрация (кариес)» → { what: "кариес", tooth: "37" } */
+export function shortParts(procedure: string | null | undefined, tooth: number | null | undefined) {
   let p = (procedure ?? "").trim();
   let t = tooth ? String(tooth) : "";
   const m = p.match(/^(\d{2})\s*[—–-]\s*/);
@@ -72,7 +78,7 @@ export function shortWhat(procedure: string | null | undefined, tooth: number | 
     /периодонтит/.test(l) ? "периодонтит" :
     /после лечения каналов/.test(l) ? "реставрация" :
     /консультац|осмотр/.test(l) ? "консультация" :
-    /гигиен|чистк/.test(l) ? "гигиена" :
+    /гигиен|чистк/.test(l) ? "чистка" :
     /удален/.test(l) ? "удаление" :
     /отбел/.test(l) ? "отбеливание" :
     /коронк/.test(l) ? "коронка" :
@@ -80,7 +86,7 @@ export function shortWhat(procedure: string | null | undefined, tooth: number | 
     l.replace(/\s*\(.*?\)\s*/g, " ").trim();
   if (w.length > 20) w = w.slice(0, 19).trimEnd() + "…";
   if (t) w = w.replace(new RegExp(`\\b(зуб\\s*)?${t}\\b`), "").trim();
-  return w ? [w, t].filter(Boolean).join(" ") : t ? `зуб ${t}` : "";
+  return { what: w, tooth: t };
 }
 
 const hhmm = (d: Date) => d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Moscow" });

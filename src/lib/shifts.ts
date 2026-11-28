@@ -47,8 +47,8 @@ export async function shiftFor(date: string): Promise<ShiftDay | null> {
 
 export type FreeWindow = { from: Date; to: Date; minutes: number };
 
-/** Свободные окна внутри смены (от 30 минут) */
-export function freeWindows(shift: { date: string; start: string; end: string }, aps: Ap[], minMinutes = 30): FreeWindow[] {
+/** Свободные окна внутри смены (любые, от 5 минут) */
+export function freeWindows(shift: { date: string; start: string; end: string }, aps: Ap[], minMinutes = 5): FreeWindow[] {
   const start = atTime(shift.date, shift.start);
   const end = atTime(shift.date, shift.end);
   const busy = aps
@@ -78,23 +78,3 @@ export function durationText(min: number) {
 
 export const windowText = (w: FreeWindow) => `${hhmm(w.from)}–${hhmm(w.to)} · ${durationText(w.minutes)}`;
 export const totalFree = (ws: FreeWindow[]) => ws.reduce((s, w) => s + w.minutes, 0);
-
-/** Текст расписания для Telegram-чата */
-export function scheduleText(
-  days: { date: string; shift: ShiftDay | null; aps: (Ap & { procedure: string; toothNumber: number | null; patient: { lastName: string; firstName: string } })[] }[],
-) {
-  const blocks = days.map(({ date, shift, aps }) => {
-    const d = parseISODate(date)!;
-    const title = d.toLocaleDateString("ru-RU", { weekday: "short", day: "numeric", month: "long", timeZone: "Europe/Moscow" });
-    const head = `📅 ${title[0].toUpperCase()}${title.slice(1)}${shift ? ` · смена ${shift.start}–${shift.end}` : ""}`;
-    const list = aps.filter(ACTIVE).map((a) => {
-      const what = [a.procedure, a.toothNumber ? `зуб ${a.toothNumber}` : ""].filter(Boolean).join(", ");
-      return `${hhmm(a.startsAt)} ${a.patient.lastName} ${a.patient.firstName}${what ? ` — ${what}` : ""}`;
-    });
-    const free = shift ? freeWindows(shift, aps) : [];
-    const lines = [head, ...(list.length ? list : ["Пока никого не записано"])];
-    if (free.length) lines.push(`🟢 Свободно: ${free.map((w) => `${hhmm(w.from)}–${hhmm(w.to)}`).join(", ")}`);
-    return lines.join("\n");
-  });
-  return blocks.join("\n\n");
-}

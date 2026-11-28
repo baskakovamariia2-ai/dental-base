@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { PushToggle } from "@/components/push-toggle";
+import { tgConfig } from "@/lib/tg-schedule";
+import { tgChooseChat, tgDisconnect, tgFindChats, tgSaveToken, tgSendNow } from "@/actions/telegram";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { logout, changePassword } from "@/actions/auth";
@@ -24,7 +26,7 @@ const USERMSG: Record<string, [string, string]> = {
 };
 
 
-export default async function MorePage({ searchParams }: { searchParams: Promise<{ pw?: string; user?: string; welcome?: string; tpl?: string; ai?: string }> }) {
+export default async function MorePage({ searchParams }: { searchParams: Promise<{ pw?: string; user?: string; welcome?: string; tpl?: string; ai?: string; tg?: string }> }) {
   const me = await requireUser();
   const sp = await searchParams;
   const isOwner = me.role === "OWNER";
@@ -71,6 +73,8 @@ export default async function MorePage({ searchParams }: { searchParams: Promise
         <h2 className="section-title">Уведомления</h2>
         <PushToggle />
       </section>
+
+      <TelegramSection msg={sp.tg} />
 
       {isOwner && (
         <section>
@@ -159,5 +163,49 @@ export default async function MorePage({ searchParams }: { searchParams: Promise
         <button className="btn-secondary w-full"><IconLogout /> Выйти</button>
       </form>
     </div>
+  );
+}
+
+async function TelegramSection({ msg }: { msg?: string }) {
+  const tg = await tgConfig();
+  return (
+    <section id="telegram">
+      <h2 className="section-title">Расписание в Telegram-чат</h2>
+      <div className="card card-pad space-y-3">
+        <p className="text-sm text-ink-soft">
+          Ваш бот пишет в чат с Ильёй одно сообщение на каждую смену и сам исправляет его, когда вы записываете, переносите или отменяете пациента.
+        </p>
+        {msg && <p className="rounded-xl bg-accent-soft px-3 py-2.5 text-sm text-accent-ink">{msg}</p>}
+        {!tg.token ? (
+          <form action={tgSaveToken} className="space-y-2">
+            <ol className="list-decimal space-y-1 pl-5 text-sm text-ink-soft">
+              <li>В Telegram откройте <b>@BotFather</b> → /newbot → придумайте имя.</li>
+              <li>Он пришлёт ключ вида <code>123456:ABC…</code> — скопируйте и вставьте сюда.</li>
+            </ol>
+            <input name="token" type="password" placeholder="Ключ бота" className="input" autoComplete="off" />
+            <button className="btn-primary w-full">Подключить бота</button>
+          </form>
+        ) : !tg.chat ? (
+          <div className="space-y-3">
+            <p className="text-sm">✅ Бот подключён. Добавьте его в чат, где вы с Ильёй (это должна быть группа), и напишите там <b>/start</b>.</p>
+            <form action={tgFindChats}><button className="btn-secondary w-full">Найти чат</button></form>
+            {tg.chats.length > 0 && (
+              <form action={tgChooseChat} className="space-y-2">
+                <select name="chat" className="input">{tg.chats.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}</select>
+                <button className="btn-primary w-full">Писать расписание в этот чат</button>
+              </form>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <p className="text-sm">✅ Пишет в чат «{tg.title}». Обновляет сообщения сам примерно раз в минуту.</p>
+            <form action={tgSendNow}><button className="btn-secondary w-full">Обновить сейчас</button></form>
+          </div>
+        )}
+        {tg.token && (
+          <form action={tgDisconnect}><button className="text-sm text-rose-600">Отключить бота</button></form>
+        )}
+      </div>
+    </section>
   );
 }
