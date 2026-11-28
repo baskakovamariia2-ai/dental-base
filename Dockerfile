@@ -15,13 +15,16 @@ ENV NODE_EXTRA_CA_CERTS=/usr/local/share/ru-ca/russian.pem
 ENV TZ=Europe/Moscow
 WORKDIR /app
 
+COPY scripts/pick-mirror.sh /usr/local/bin/pick-mirror.sh
+RUN sh /usr/local/bin/pick-mirror.sh
+
 COPY package.json ./
 COPY prisma ./prisma
-RUN npm install --no-audit --no-fund --fetch-retries=5 --fetch-timeout=120000
+RUN . /etc/mirror.env && npm install --no-audit --no-fund --fetch-retries=5 --fetch-timeout=120000
 
 COPY . .
 # кэш сборки не нужен в готовом образе — экономим место на диске сервера
-RUN npm run build && rm -rf .next/cache
+RUN . /etc/mirror.env && npm run build && rm -rf .next/cache
 
 ENV NODE_ENV=production
 ENV PORT=3000
