@@ -28,12 +28,20 @@ export async function tgConfig() {
 }
 
 export async function tgApi<T = unknown>(token: string, method: string, body?: Record<string, unknown>): Promise<T> {
-  const r = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body ?? {}),
-    signal: AbortSignal.timeout(15000),
-  });
+  let r: Response;
+  try {
+    r = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body ?? {}),
+      signal: AbortSignal.timeout(15000),
+    });
+  } catch (e) {
+    // «fetch failed» сам по себе ничего не говорит — показываем настоящую причину
+    const c = (e as { cause?: { code?: string; message?: string } }).cause;
+    const why = c?.code ?? c?.message ?? (e as Error).message;
+    throw new Error(`сервер не смог связаться с Telegram (${why})`);
+  }
   const j = (await r.json().catch(() => ({}))) as { ok?: boolean; result?: T; description?: string };
   if (!j.ok) throw new Error(j.description || `HTTP ${r.status}`);
   return j.result as T;

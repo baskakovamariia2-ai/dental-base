@@ -1,5 +1,9 @@
+import dns from "node:dns";
 import { pushTick } from "./lib/push";
 import { telegramTick } from "./lib/tg-schedule";
+
+// сначала IPv4: в контейнере нет IPv6, а Telegram и другие сайты отдают оба адреса
+dns.setDefaultResultOrder("ipv4first");
 
 const g = globalThis as unknown as { __pushTimer?: ReturnType<typeof setInterval>; __tgErr?: string };
 if (!g.__pushTimer) {
