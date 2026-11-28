@@ -8,7 +8,7 @@ import { shortParts } from "./push";
  * которое бот сам исправляет, когда в расписании что-то меняется (раз в минуту).
  */
 
-const K = { token: "tg-bot-token", chat: "tg-chat-id", title: "tg-chat-title", chats: "tg-chats-found" };
+const K = { token: "tg-bot-token", chat: "tg-chat-id", title: "tg-chat-title", chats: "tg-chats-found", relay: "tg-relay-url" };
 const msgKey = (date: string) => `tg-msg-${date}`;
 
 const hm = (d: Date) => d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Moscow" });
@@ -23,19 +23,32 @@ async function put(key: string, value: string) {
 }
 
 export async function tgConfig() {
-  const [token, chat, title, chats] = await Promise.all([get(K.token), get(K.chat), get(K.title), get(K.chats)]);
-  return { token, chat, title, chats: chats ? (JSON.parse(chats) as { id: string; title: string }[]) : [] };
+  const [token, chat, title, chats, relay] = await Promise.all([get(K.token), get(K.chat), get(K.title), get(K.chats), get(K.relay)]);
+  return { token, chat, title, relay, chats: chats ? (JSON.parse(chats) as { id: string; title: string }[]) : [] };
 }
 
+/**
+ * Запрос к Telegram. Из российских дата-центров api.telegram.org закрыт, поэтому, если указан
+ * «передатчик» (Google Apps Script), запрос идёт через него: база → Google → Telegram.
+ */
 export async function tgApi<T = unknown>(token: string, method: string, body?: Record<string, unknown>): Promise<T> {
+  const relay = await get(K.relay);
   let r: Response;
   try {
-    r = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body ?? {}),
-      signal: AbortSignal.timeout(15000),
-    });
+    r = relay
+      ? await fetch(relay, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain" },
+          body: JSON.stringify({ token, method, body: body ?? {} }),
+          redirect: "follow",
+          signal: AbortSignal.timeout(30000),
+        })
+      : await fetch(`https://api.telegram.org/bot${token}/${method}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body ?? {}),
+          signal: AbortSignal.timeout(15000),
+        });
   } catch (e) {
     // «fetch failed» сам по себе ничего не говорит — показываем настоящую причину
     const c = (e as { cause?: { code?: string; message?: string } }).cause;
@@ -121,6 +134,10 @@ export async function telegramTick() {
   return { sent, edited };
 }
 
+export async function saveTgRelay(url: string) {
+  await put(K.relay, url);
+}
+
 export async function saveTgToken(token: string) {
   const me = await tgApi<{ username: string }>(token, "getMe");
   await put(K.token, token);
@@ -154,6 +171,6 @@ export async function chooseTgChat(id: string) {
 }
 
 export async function disconnectTg() {
-  await prisma.setting.deleteMany({ where: { key: { in: Object.values(K) } } });
+  await prisma.setting.deleteMany({ where: { key: { in: [K.token, K.chat, K.title, K.chats] } } });
   await prisma.setting.deleteMany({ where: { key: { startsWith: "tg-msg-" } } });
 }

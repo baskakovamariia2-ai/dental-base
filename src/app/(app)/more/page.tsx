@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { PushToggle } from "@/components/push-toggle";
 import { tgConfig } from "@/lib/tg-schedule";
-import { tgChooseChat, tgDisconnect, tgFindChats, tgSaveToken, tgSendNow } from "@/actions/telegram";
+import { tgChooseChat, tgDisconnect, tgFindChats, tgSaveRelay, tgSaveToken, tgSendNow } from "@/actions/telegram";
+import { CopyBox } from "@/components/copy-box";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { logout, changePassword } from "@/actions/auth";
@@ -176,8 +177,27 @@ async function TelegramSection({ msg }: { msg?: string }) {
           Ваш бот пишет в чат с Ильёй одно сообщение на каждую смену и сам исправляет его, когда вы записываете, переносите или отменяете пациента.
         </p>
         {msg && <p className="rounded-xl bg-accent-soft px-3 py-2.5 text-sm text-accent-ink">{msg}</p>}
-        {!tg.token ? (
+        {!tg.relay ? (
+          <form action={tgSaveRelay} className="space-y-3">
+            <p className="text-sm">
+              <b>Шаг 1. Передатчик.</b> С российского сервера Telegram закрыт, поэтому сообщения пойдут через ваш Google (бесплатно). Удобнее сделать с компьютера:
+            </p>
+            <ol className="list-decimal space-y-1 pl-5 text-sm text-ink-soft">
+              <li>Откройте <b>script.new</b> в браузере (войдите в свой Google).</li>
+              <li>Сотрите всё, что там написано, и вставьте этот код:</li>
+            </ol>
+            <CopyBox text={RELAY_CODE} />
+            <ol start={3} className="list-decimal space-y-1 pl-5 text-sm text-ink-soft">
+              <li>Нажмите <b>Развернуть → Новое развёртывание</b>, тип — <b>Веб-приложение</b>.</li>
+              <li>«Запуск от имени» — <b>Я</b>, «У кого есть доступ» — <b>Все</b>. Нажмите «Развернуть» и разрешите доступ.</li>
+              <li>Скопируйте <b>URL веб-приложения</b> (…/exec) и вставьте сюда:</li>
+            </ol>
+            <input name="relay" placeholder="https://script.google.com/macros/s/…/exec" className="input" autoComplete="off" />
+            <button className="btn-primary w-full">Сохранить передатчик</button>
+          </form>
+        ) : !tg.token ? (
           <form action={tgSaveToken} className="space-y-2">
+            <p className="text-sm">✅ Передатчик есть. <b>Шаг 2. Бот.</b></p>
             <ol className="list-decimal space-y-1 pl-5 text-sm text-ink-soft">
               <li>В Telegram откройте <b>@BotFather</b> → /newbot → придумайте имя.</li>
               <li>Он пришлёт ключ вида <code>123456:ABC…</code> — скопируйте и вставьте сюда.</li>
@@ -202,6 +222,9 @@ async function TelegramSection({ msg }: { msg?: string }) {
             <form action={tgSendNow}><button className="btn-secondary w-full">Обновить сейчас</button></form>
           </div>
         )}
+        {tg.relay && !tg.token && (
+          <form action={tgSaveRelay}><input type="hidden" name="relay" value="" /><button className="text-sm text-ink-mute">Сменить передатчик</button></form>
+        )}
         {tg.token && (
           <form action={tgDisconnect}><button className="text-sm text-rose-600">Отключить бота</button></form>
         )}
@@ -209,3 +232,16 @@ async function TelegramSection({ msg }: { msg?: string }) {
     </section>
   );
 }
+
+const RELAY_CODE = `// Передатчик для Dental Base: база → Google → Telegram
+function doPost(e) {
+  var req = JSON.parse(e.postData.contents);
+  if (!/^[A-Za-z]+$/.test(req.method)) throw new Error("bad method");
+  var r = UrlFetchApp.fetch("https://api.telegram.org/bot" + req.token + "/" + req.method, {
+    method: "post",
+    contentType: "application/json",
+    payload: JSON.stringify(req.body || {}),
+    muteHttpExceptions: true,
+  });
+  return ContentService.createTextOutput(r.getContentText()).setMimeType(ContentService.MimeType.JSON);
+}`;

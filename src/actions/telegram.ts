@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { str } from "@/lib/forms";
-import { chooseTgChat, disconnectTg, findTgChats, saveTgToken, telegramTick } from "@/lib/tg-schedule";
+import { chooseTgChat, disconnectTg, findTgChats, saveTgRelay, saveTgToken, telegramTick } from "@/lib/tg-schedule";
 
 const back = (m: string) => redirect(`/more?tg=${encodeURIComponent(m)}#telegram`);
 
@@ -63,4 +63,13 @@ export async function tgDisconnect() {
   await disconnectTg();
   revalidatePath("/more");
   back("Бот отключён");
+}
+
+export async function tgSaveRelay(formData: FormData) {
+  await requireUser();
+  const url = str(formData, "relay", 300).trim();
+  if (url && !/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(url)) back("Адрес должен быть вида https://script.google.com/macros/s/…/exec — скопируйте его целиком");
+  await saveTgRelay(url);
+  revalidatePath("/more");
+  back(url ? "Передатчик сохранён. Теперь вставьте ключ бота." : "Передатчик убран");
 }
